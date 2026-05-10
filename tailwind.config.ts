@@ -9,8 +9,20 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        cream: "#F7F4EF",
+        surface: "#EDE8E1",
+        border: "#DCCFC1",
+        taupe: "#B8A898",
+        ink: "#222222",
+      },
+      fontFamily: {
+        playfair: ['"Playfair Display"', "serif"],
+        inter: ['"Inter"', "sans-serif"],
+        noto: ['"Noto Sans TC"', "sans-serif"],
+      },
+      letterSpacing: {
+        editorial: "0.15em",
+        wide: "0.25em",
       },
     },
   },
