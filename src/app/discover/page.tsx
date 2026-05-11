@@ -401,6 +401,7 @@ export default function DiscoverPage() {
               {POPULAR_CITIES.map(city => (
                 <div
                   key={city.name}
+                  onClick={() => { setSearchQuery(city.name); setDebouncedQuery(city.name); }}
                   className="flex-shrink-0 w-32 rounded-xl overflow-hidden group cursor-pointer"
                 >
                   <div className="relative aspect-[3/4]">

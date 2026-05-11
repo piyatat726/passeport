@@ -169,7 +169,7 @@ export default function MapPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-cream relative">
+    <div className="h-[100dvh] md:h-full flex flex-col bg-cream relative" style={{ minHeight: '100%' }}>
       {/* Header */}
       <div className="relative z-20 bg-cream/95 backdrop-blur-md pt-14 pb-2 px-4 border-b border-border">
         {/* Search */}
@@ -213,9 +213,18 @@ export default function MapPage() {
 
       {/* Map */}
       <div className="flex-1 relative">
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-cream/80 z-10">
+        {(loading || !mapLoaded) && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-cream/80 z-10 gap-3">
             <div className="w-5 h-5 border-2 border-ink border-t-transparent rounded-full animate-spin" />
+            <p className="text-[10px] text-taupe font-noto">{loading ? '載入地點中...' : '載入地圖中...'}</p>
+            {!loading && (
+              <button
+                onClick={() => setShowList(true)}
+                className="mt-2 px-4 py-1.5 border border-border text-taupe text-[10px] rounded-full font-inter hover:bg-surface transition-colors"
+              >
+                切換列表模式
+              </button>
+            )}
           </div>
         )}
         <div id="passeport-map" className="absolute inset-0" />
@@ -293,8 +302,15 @@ function PlaceCard({ place, onClose }: { place: Place; onClose: () => void }) {
           >
             VIEW DETAILS
           </Link>
-          <button className="px-4 py-2 border border-border text-ink text-[11px] rounded-lg tracking-editorial uppercase font-inter">
-            SAVE
+          <button
+            onClick={() => {
+              if (place.latitude && place.longitude) {
+                window.open(`https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}`, '_blank');
+              }
+            }}
+            className="px-4 py-2 border border-border text-ink text-[11px] rounded-lg tracking-editorial uppercase font-inter"
+          >
+            導航
           </button>
         </div>
       </div>

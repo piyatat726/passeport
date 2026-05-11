@@ -1,6 +1,3 @@
-const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_PLACES_KEY || '';
-const BASE_URL = 'https://places.googleapis.com/v1';
-
 // ═══ Types ═══
 
 export interface GooglePlacePhoto {
@@ -45,44 +42,6 @@ export interface GooglePlace {
   reviews: GooglePlaceReview[];
 }
 
-// ═══ Field masks ═══
-
-const SEARCH_FIELDS = [
-  'places.id',
-  'places.displayName',
-  'places.formattedAddress',
-  'places.rating',
-  'places.userRatingCount',
-  'places.photos',
-  'places.currentOpeningHours',
-  'places.internationalPhoneNumber',
-  'places.googleMapsUri',
-  'places.websiteUri',
-  'places.location',
-  'places.types',
-  'places.priceLevel',
-  'places.editorialSummary',
-  'places.reviews',
-].join(',');
-
-const DETAIL_FIELDS = [
-  'id',
-  'displayName',
-  'formattedAddress',
-  'rating',
-  'userRatingCount',
-  'photos',
-  'currentOpeningHours',
-  'internationalPhoneNumber',
-  'googleMapsUri',
-  'websiteUri',
-  'location',
-  'types',
-  'priceLevel',
-  'editorialSummary',
-  'reviews',
-].join(',');
-
 // ═══ Simple in-memory cache ═══
 
 const cache = new Map<string, { data: unknown; ts: number }>();
@@ -102,7 +61,7 @@ function setCache(key: string, data: unknown) {
   cache.set(key, { data, ts: Date.now() });
 }
 
-// ═══ API Functions ═══
+// ═══ API Functions (call server-side proxy) ═══
 
 /**
  * Text search for a place. Returns the top matching result.
@@ -112,42 +71,21 @@ export async function searchPlace(
   lat?: number,
   lng?: number
 ): Promise<GooglePlace | null> {
-  if (!API_KEY) return null;
-
   const cacheKey = `search:${query}:${lat}:${lng}`;
   const cached = getCached<GooglePlace>(cacheKey);
   if (cached) return cached;
 
-  const body: Record<string, unknown> = {
-    textQuery: query,
-    languageCode: 'zh-TW',
-    maxResultCount: 1,
-  };
-
-  if (lat !== undefined && lng !== undefined) {
-    body.locationBias = {
-      circle: {
-        center: { latitude: lat, longitude: lng },
-        radius: 1000.0,
-      },
-    };
-  }
-
   try {
-    const res = await fetch(`${BASE_URL}/places:searchText`, {
+    const res = await fetch('/api/places', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': API_KEY,
-        'X-Goog-FieldMask': SEARCH_FIELDS,
-      },
-      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'search', query, lat, lng }),
     });
 
     if (!res.ok) return null;
 
     const data = await res.json();
-    const place = data.places?.[0] || null;
+    const place = data.place || null;
     if (place) setCache(cacheKey, place);
     return place;
   } catch {
@@ -161,24 +99,21 @@ export async function searchPlace(
 export async function getPlaceDetails(
   googlePlaceId: string
 ): Promise<GooglePlace | null> {
-  if (!API_KEY) return null;
-
   const cacheKey = `details:${googlePlaceId}`;
   const cached = getCached<GooglePlace>(cacheKey);
   if (cached) return cached;
 
   try {
-    const res = await fetch(`${BASE_URL}/places/${googlePlaceId}`, {
-      headers: {
-        'X-Goog-Api-Key': API_KEY,
-        'X-Goog-FieldMask': DETAIL_FIELDS,
-      },
+    const res = await fetch('/api/places', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'details', googlePlaceId }),
     });
 
     if (!res.ok) return null;
 
-    const place = await res.json();
-    setCache(cacheKey, place);
+    const place = (await res.json()).place || null;
+    if (place) setCache(cacheKey, place);
     return place;
   } catch {
     return null;
@@ -186,10 +121,12 @@ export async function getPlaceDetails(
 }
 
 /**
- * Returns a photo URL for a Google Places photo reference.
+ * Returns a proxied photo URL for a Google Places photo reference.
+ * The URL points to /api/places/photo which fetches the image server-side,
+ * so the API key is never exposed to the client.
  */
 export function getPlacePhotoUrl(photoName: string, maxWidth = 800): string {
-  return `${BASE_URL}/${photoName}/media?maxWidthPx=${maxWidth}&key=${API_KEY}`;
+  return `/api/places/photo?name=${encodeURIComponent(photoName)}&maxWidth=${maxWidth}`;
 }
 
 /**
@@ -201,36 +138,15 @@ export async function searchNearbyPlaces(
   type?: string,
   radius = 1000
 ): Promise<GooglePlace[]> {
-  if (!API_KEY) return [];
-
   const cacheKey = `nearby:${lat}:${lng}:${type}:${radius}`;
   const cached = getCached<GooglePlace[]>(cacheKey);
   if (cached) return cached;
 
-  const body: Record<string, unknown> = {
-    locationRestriction: {
-      circle: {
-        center: { latitude: lat, longitude: lng },
-        radius,
-      },
-    },
-    languageCode: 'zh-TW',
-    maxResultCount: 10,
-  };
-
-  if (type) {
-    body.includedTypes = [type];
-  }
-
   try {
-    const res = await fetch(`${BASE_URL}/places:searchNearby`, {
+    const res = await fetch('/api/places', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': API_KEY,
-        'X-Goog-FieldMask': SEARCH_FIELDS,
-      },
-      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'nearby', lat, lng, type, radius }),
     });
 
     if (!res.ok) return [];

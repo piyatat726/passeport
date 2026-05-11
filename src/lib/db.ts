@@ -320,12 +320,18 @@ export async function updatePost(postId: string, updates: Partial<Pick<Post,
 
 // ═══ Search ═══
 
+// Sanitize user input for PostgREST .or() filter interpolation
+// to prevent filter injection attacks
+function sanitizeSearchQuery(query: string): string {
+  return query.replace(/[%_\\]/g, '\\$&').replace(/[,.()"']/g, '');
+}
+
 export async function searchPosts(query: string, limit = 20) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('posts')
     .select('*, user:users!posts_user_id_fkey(*)')
-    .or(`title.ilike.%${query}%,content.ilike.%${query}%,location.ilike.%${query}%`)
+    .or(`title.ilike.%${sanitizeSearchQuery(query)}%,content.ilike.%${sanitizeSearchQuery(query)}%,location.ilike.%${sanitizeSearchQuery(query)}%`)
     .order('created_at', { ascending: false })
     .limit(limit);
 
@@ -351,7 +357,7 @@ export async function searchUsers(query: string, limit = 10) {
   const { data, error } = await supabase
     .from('users')
     .select('*')
-    .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+    .or(`username.ilike.%${sanitizeSearchQuery(query)}%,display_name.ilike.%${sanitizeSearchQuery(query)}%`)
     .limit(limit);
 
   if (error) throw error;
@@ -363,7 +369,7 @@ export async function searchPlaces(query: string, limit = 10) {
   const { data, error } = await supabase
     .from('places')
     .select('*')
-    .or(`name.ilike.%${query}%,address.ilike.%${query}%`)
+    .or(`name.ilike.%${sanitizeSearchQuery(query)}%,address.ilike.%${sanitizeSearchQuery(query)}%`)
     .order('mention_count', { ascending: false })
     .limit(limit);
 

@@ -130,15 +130,17 @@ export default function PlaceDetailPage() {
 
   return (
     <div className="min-h-screen bg-cream">
-      {/* ── Back Button (floating) ── */}
-      <button
-        onClick={() => router.back()}
-        className="fixed top-12 left-4 z-50 w-9 h-9 flex items-center justify-center rounded-full bg-cream/90 backdrop-blur-md border border-border shadow-sm"
-      >
-        <svg className="w-4 h-4 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M19 12H5M12 19l-7-7 7-7" />
-        </svg>
-      </button>
+      {/* ── Back Button (floating, positioned inside phone frame) ── */}
+      <div className="sticky top-0 z-50 pointer-events-none" style={{ height: 0 }}>
+        <button
+          onClick={() => router.back()}
+          className="pointer-events-auto absolute top-12 left-4 w-9 h-9 flex items-center justify-center rounded-full bg-cream/90 backdrop-blur-md border border-border shadow-sm"
+        >
+          <svg className="w-4 h-4 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
+        </button>
+      </div>
 
       {/* ── Hero Photo ── */}
       {heroUrl ? (

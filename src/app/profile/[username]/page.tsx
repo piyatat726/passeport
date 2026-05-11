@@ -141,14 +141,18 @@ export default function ProfilePage() {
               <>
                 <div className="fixed inset-0" onClick={() => setShowMenu(false)} />
                 <div className="absolute right-0 mt-2 w-44 bg-cream border border-border rounded-xl shadow-lg overflow-hidden animate-slide-up">
-                  <button className="w-full px-4 py-3 text-left text-xs font-noto text-ink hover:bg-surface transition-colors flex items-center gap-2.5">
+                  <Link
+                    href={`/profile/${profileUser?.username}/edit`}
+                    onClick={() => setShowMenu(false)}
+                    className="w-full px-4 py-3 text-left text-xs font-noto text-ink hover:bg-surface transition-colors flex items-center gap-2.5"
+                  >
                     <svg className="w-3.5 h-3.5 text-taupe" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4"/></svg>
-                    帳號設定
-                  </button>
-                  <button className="w-full px-4 py-3 text-left text-xs font-noto text-ink hover:bg-surface transition-colors flex items-center gap-2.5">
-                    <svg className="w-3.5 h-3.5 text-taupe" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-                    關於 PASSEPORT
-                  </button>
+                    編輯個人檔案
+                  </Link>
+                  <div className="w-full px-4 py-3 text-left text-xs font-noto text-taupe/60 flex items-center gap-2.5">
+                    <svg className="w-3.5 h-3.5 text-taupe/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                    PASSEPORT v1.0
+                  </div>
                   <div className="border-t border-border" />
                   <button
                     onClick={async () => {

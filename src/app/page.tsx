@@ -158,8 +158,28 @@ export default function HomePage() {
 
       {/* Content */}
       <div className="px-5 pt-5">
+        {/* Following tab placeholder */}
+        {activeTab === 'following' && (
+          <div className="py-20 text-center">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-surface flex items-center justify-center">
+              <svg className="w-8 h-8 text-taupe" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            </div>
+            <h3 className="font-playfair italic text-lg tracking-editorial text-ink mb-2">
+              COMING SOON
+            </h3>
+            <p className="text-sm text-taupe font-noto">
+              追蹤你喜歡的創作者，這裡會顯示他們的最新文章
+            </p>
+          </div>
+        )}
+
         {/* Loading State */}
-        {feedLoading && (
+        {activeTab === 'foryou' && feedLoading && (
           <div className="py-20 text-center">
             <div className="w-8 h-8 border-2 border-taupe/30 border-t-ink rounded-full animate-spin mx-auto" />
             <p className="text-xs text-taupe font-noto mt-4">載入中...</p>
@@ -167,7 +187,7 @@ export default function HomePage() {
         )}
 
         {/* Empty State */}
-        {!feedLoading && posts.length === 0 && (
+        {activeTab === 'foryou' && !feedLoading && posts.length === 0 && (
           <div className="py-20 text-center">
             <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-surface flex items-center justify-center">
               <svg className="w-8 h-8 text-taupe" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -192,7 +212,7 @@ export default function HomePage() {
         )}
 
         {/* Feed */}
-        {!feedLoading && posts.length > 0 && (
+        {activeTab === 'foryou' && !feedLoading && posts.length > 0 && (
           <>
             {/* Featured Card */}
             {featured && (

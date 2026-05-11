@@ -3,15 +3,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { getPostById, isPostLiked, toggleLike, getComments, addComment, deletePost } from '@/lib/db';
+import { getPostById, isPostLiked, toggleLike, getComments, addComment, deletePost, isFollowing as checkFollowing, toggleFollow } from '@/lib/db';
 import { CATEGORIES, Post, User, Comment } from '@/lib/types';
 import Link from 'next/link';
 import ConfirmDialog from '@/components/confirm-dialog';
+import { useIsDesktop } from '@/components/desktop-frame';
 
 export default function PostDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const { user, isDemo } = useAuth();
+  const isDesktop = useIsDesktop();
   const [post, setPost] = useState<(Post & { user: User }) | null>(null);
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -34,10 +36,14 @@ export default function PostDetailPage() {
       setPost(data);
       setLikeCount(data.likes_count || 0);
 
-      // Check like status
+      // Check like & follow status
       if (user) {
         const liked = await isPostLiked(user.id, data.id);
         setIsLiked(liked);
+        if (data.user_id !== user.id) {
+          const following = await checkFollowing(user.id, data.user_id);
+          setIsFollowing(following);
+        }
       }
 
       // Load comments
@@ -101,14 +107,18 @@ export default function PostDetailPage() {
   };
 
   const handleShare = async () => {
-    if (navigator.share) {
-      await navigator.share({
-        title: post.title,
-        text: post.subtitle,
-        url: window.location.href,
-      });
-    } else {
-      navigator.clipboard.writeText(window.location.href);
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: post.title,
+          text: post.subtitle,
+          url: window.location.href,
+        });
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+      }
+    } catch {
+      // User cancelled share dialog — ignore
     }
   };
 
@@ -249,7 +259,16 @@ export default function PostDetailPage() {
         </Link>
         {user?.id !== post.user_id && (
           <button
-            onClick={() => setIsFollowing(!isFollowing)}
+            onClick={async () => {
+              if (!user || isDemo) return;
+              const was = isFollowing;
+              setIsFollowing(!was);
+              try {
+                await toggleFollow(user.id, post.user_id);
+              } catch {
+                setIsFollowing(was);
+              }
+            }}
             className={`px-4 py-1.5 text-[10px] tracking-editorial uppercase rounded-full font-inter transition-colors ${
               isFollowing
                 ? 'border border-border text-taupe'
@@ -397,7 +416,7 @@ export default function PostDetailPage() {
       />
 
       {/* Sticky Bottom Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-cream/95 backdrop-blur-md border-t border-border">
+      <div className={`${isDesktop ? 'sticky' : 'fixed left-0 right-0'} bottom-0 z-40 bg-cream/95 backdrop-blur-md border-t border-border`}>
         <div className="flex items-center justify-around h-14 px-6 max-w-lg mx-auto">
           <button onClick={handleLike} className="flex items-center gap-1.5 py-2 px-3">
             {isLiked ? (
