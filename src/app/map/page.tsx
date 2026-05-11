@@ -11,16 +11,10 @@ const hasMapbox = MAPBOX_TOKEN.length > 0 && !MAPBOX_TOKEN.includes('placeholder
 
 const PLACE_CATEGORIES = [
   { value: 'all', label: '全部', icon: '📍' },
-  { value: 'restaurant', label: '餐廳', icon: '🍽️' },
-  { value: 'cafe', label: '咖啡', icon: '☕' },
-  { value: 'snack', label: '小吃', icon: '🍜' },
-  { value: 'attraction', label: '景點', icon: '🏛️' },
-  { value: 'shop', label: '潮流店', icon: '🛍️' },
-  { value: 'bar', label: '酒吧', icon: '🍸' },
-  { value: 'cafe_journal', label: '咖啡誌', icon: '☕' },
-  { value: 'table_taste', label: '餐桌風景', icon: '🍽️' },
-  { value: 'city_guide', label: '城市指南', icon: '🏙️' },
-  { value: 'travel_notes', label: '旅行筆記', icon: '✈️' },
+  { value: '餐廳', label: '餐廳', icon: '🍽️' },
+  { value: '咖啡', label: '咖啡', icon: '☕' },
+  { value: '景點', label: '景點', icon: '🏛️' },
+  { value: '博物館', label: '博物館', icon: '🎨' },
 ] as const;
 
 export default function MapPage() {
@@ -38,7 +32,7 @@ export default function MapPage() {
   useEffect(() => {
     const loadPlaces = async () => {
       try {
-        const data = await getPlacesWithCoords();
+        const data = await getPlacesWithCoords(2000);
         setPlaces(data);
       } catch (err) {
         console.error('Failed to load places:', err);

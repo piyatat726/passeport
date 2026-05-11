@@ -417,7 +417,7 @@ export async function getPostsByPlace(placeId: string) {
   return (data || []).map((d: Record<string, unknown>) => d.posts).filter(Boolean) as (Post & { user: User })[];
 }
 
-export async function getPlacesWithCoords(limit = 50) {
+export async function getPlacesWithCoords(limit = 500) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('places')
@@ -431,7 +431,7 @@ export async function getPlacesWithCoords(limit = 50) {
   return data as Place[];
 }
 
-export async function getAllPlaces(limit = 100) {
+export async function getAllPlaces(limit = 2000) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('places')
