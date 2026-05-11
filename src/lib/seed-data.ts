@@ -5,7 +5,7 @@ export const SEED_USER: User = {
   username: 'piyatat.passeport',
   display_name: 'Piyatat',
   bio: 'Travel · Fashion · Café · Life. Enjoy the little things. 把日常變成一本可以慢慢翻的雜誌。',
-  avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face',
+  avatar_url: '',
   cities: ['Taipei', 'Tokyo', 'Paris'],
   followers_count: 1247,
   following_count: 348,

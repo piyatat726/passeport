@@ -3,10 +3,12 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { useIsDesktop } from './desktop-frame';
 
 export function BottomNav() {
   const pathname = usePathname();
   const { user } = useAuth();
+  const isDesktop = useIsDesktop();
 
   const profileHref = user ? `/profile/${user.username}` : '/auth';
 
@@ -19,7 +21,7 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-cream/95 backdrop-blur-md border-t border-border">
+    <nav className={`${isDesktop ? 'sticky' : 'fixed left-0 right-0'} bottom-0 z-40 bg-cream/95 backdrop-blur-md border-t border-border`}>
       <div className="flex items-center justify-around h-16 px-2">
         {NAV_ITEMS.map((item) => {
           const isActive = item.isProfile
