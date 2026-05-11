@@ -112,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         display_name: username,
         bio: '',
         avatar_url: '',
-        cities: [],
+        cities: [] as string[],
       };
 
       const { data: created, error: insertError } = await supabase
