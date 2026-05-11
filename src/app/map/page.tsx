@@ -291,7 +291,7 @@ function PlaceCard({ place, onClose }: { place: Place; onClose: () => void }) {
             href={`/place/${place.id}`}
             className="flex-1 py-2 bg-ink text-cream text-[11px] text-center rounded-lg tracking-editorial uppercase font-inter"
           >
-            VIEW STORIES
+            VIEW DETAILS
           </Link>
           <button className="px-4 py-2 border border-border text-ink text-[11px] rounded-lg tracking-editorial uppercase font-inter">
             SAVE
