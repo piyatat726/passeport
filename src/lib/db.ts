@@ -692,6 +692,35 @@ export async function getAllPlaces(limit = 2000) {
   return data as Place[];
 }
 
+// ═══ Post ↔ Place helpers for map integration ═══
+
+export async function getPlacesWithPosts(limit = 200) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('places')
+    .select('*, post_places(posts:post_id(id, title, cover_image_url, category, user:users!posts_user_id_fkey(display_name, avatar_url)))')
+    .not('latitude', 'is', null)
+    .not('longitude', 'is', null)
+    .order('mention_count', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getPostPlace(postId: string): Promise<Place | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('post_places')
+    .select('place:place_id(*)')
+    .eq('post_id', postId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return (data as Record<string, unknown>).place as Place;
+}
+
 // ═══ Direct Messages ═══
 
 export async function getOrCreateConversation(userId1: string, userId2: string): Promise<string> {

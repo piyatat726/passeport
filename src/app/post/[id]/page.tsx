@@ -27,6 +27,7 @@ export default function PostDetailPage() {
   const [showMenu, setShowMenu] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [placeCoords, setPlaceCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const loadPost = useCallback(async () => {
     if (!id || isDemo) {
@@ -55,6 +56,15 @@ export default function PostDetailPage() {
       // Load comments
       const cmts = await getComments(data.id);
       setComments(cmts);
+
+      // Fetch linked place coordinates for map link
+      try {
+        const { getPostPlace } = await import('@/lib/db');
+        const linkedPlace = await getPostPlace(data.id);
+        if (linkedPlace?.latitude && linkedPlace?.longitude) {
+          setPlaceCoords({ lat: linkedPlace.latitude, lng: linkedPlace.longitude });
+        }
+      } catch { /* non-critical */ }
     } catch (err) {
       console.error('Failed to load post:', err);
     } finally {
@@ -245,7 +255,13 @@ export default function PostDetailPage() {
                   <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
                   <circle cx="12" cy="10" r="3" />
                 </svg>
-                <span>{post.location.split(',')[0]}</span>
+                {placeCoords ? (
+                  <Link href={`/map?lat=${placeCoords.lat}&lng=${placeCoords.lng}&zoom=16`} className="hover:text-white/90 underline underline-offset-2 decoration-white/30">
+                    {post.location.split(',')[0]}
+                  </Link>
+                ) : (
+                  <span>{post.location.split(',')[0]}</span>
+                )}
                 <span>·</span>
               </>
             )}

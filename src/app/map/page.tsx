@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { BottomNav } from '@/components/bottom-nav';
 import { searchNearbyPlaces, searchPlaces, getPlacePhotoUrl, translateTypes, GooglePlace } from '@/lib/google-places';
 import Link from 'next/link';
@@ -14,6 +15,7 @@ const MARKER_COLORS: Record<string, { bg: string; grad: string; shadow: string }
   cafe:       { bg: '#7EC4A5', grad: '#6AAE8F', shadow: 'rgba(126,196,165,0.35)' },
   attraction: { bg: '#EAC87D', grad: '#D4B167', shadow: 'rgba(234,200,125,0.35)' },
   museum:     { bg: '#9B8EC4', grad: '#8577AD', shadow: 'rgba(155,142,196,0.35)' },
+  posts:      { bg: '#D4A5C8', grad: '#BE8FB2', shadow: 'rgba(212,165,200,0.35)' },
   default:    { bg: '#D4A5A5', grad: '#C08E8E', shadow: 'rgba(212,165,165,0.35)' },
 };
 
@@ -32,12 +34,14 @@ const PLACE_CATEGORIES = [
   { value: 'cafe', label: '咖啡', icon: '☕', color: '#7EC4A5' },
   { value: 'attraction', label: '景點', icon: '🏛️', color: '#EAC87D' },
   { value: 'museum', label: '博物館', icon: '🎨', color: '#9B8EC4' },
+  { value: 'posts', label: '文章', icon: '✍️', color: '#D4A5C8' },
 ] as const;
 
 // ═══ Helpers ═══
 
 function getIconForPlace(types: string[]): string {
   if (!types) return '📍';
+  if (types.some(t => t === 'post')) return '✍️';
   if (types.some(t => t.includes('cafe') || t.includes('coffee'))) return '☕';
   if (types.some(t => t.includes('museum') || t.includes('art_gallery'))) return '🎨';
   if (types.some(t => t.includes('tourist') || t.includes('park') || t.includes('amusement'))) return '🏛️';
@@ -47,6 +51,7 @@ function getIconForPlace(types: string[]): string {
 
 function getMarkerStyle(types: string[]): { bg: string; grad: string; shadow: string } {
   if (!types) return MARKER_COLORS.default;
+  if (types.some(t => t === 'post')) return MARKER_COLORS.posts;
   if (types.some(t => t.includes('cafe') || t.includes('coffee'))) return MARKER_COLORS.cafe;
   if (types.some(t => t.includes('museum') || t.includes('art_gallery'))) return MARKER_COLORS.museum;
   if (types.some(t => t.includes('tourist') || t.includes('park') || t.includes('amusement'))) return MARKER_COLORS.attraction;
@@ -189,6 +194,8 @@ interface MapPlace {
   photoRef?: string;
   priceLevel?: string;
   isOpen?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  linkedPosts?: any[];
 }
 
 function googleToMapPlace(g: GooglePlace): MapPlace {
@@ -212,6 +219,15 @@ function googleToMapPlace(g: GooglePlace): MapPlace {
 // ═══ Main Component ═══
 
 export default function MapPage() {
+  return (
+    <Suspense>
+      <MapPageInner />
+    </Suspense>
+  );
+}
+
+function MapPageInner() {
+  const searchParams = useSearchParams();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -239,6 +255,7 @@ export default function MapPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
+  const [postPlacesLoaded, setPostPlacesLoaded] = useState(false);
 
   // Keep refs in sync with state for use inside event handlers
   useEffect(() => { isSearchModeRef.current = isSearchMode; }, [isSearchMode]);
@@ -284,6 +301,39 @@ export default function MapPage() {
       setLoadingPlaces(false);
     }
   }, []);
+
+  // ═══ Fetch PASSEPORT post-places from Supabase ═══
+  const fetchPostPlaces = useCallback(async () => {
+    if (postPlacesLoaded) return;
+    setLoadingPlaces(true);
+    try {
+      const { getPlacesWithPosts } = await import('@/lib/db');
+      const places = await getPlacesWithPosts(200);
+      setPostPlacesLoaded(true);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mapPlaces: MapPlace[] = places
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter((p: any) => p.latitude && p.longitude)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          address: p.address || '',
+          lat: p.latitude,
+          lng: p.longitude,
+          icon: '✍️',
+          types: ['post'],
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          linkedPosts: (p.post_places || []).map((pp: any) => pp.posts).filter(Boolean),
+        }));
+      setNearbyPlaces(mapPlaces);
+    } catch (err) {
+      console.error('Failed to fetch post places:', err);
+    } finally {
+      setLoadingPlaces(false);
+    }
+  }, [postPlacesLoaded]);
 
   // ═══ Add markers to map ═══
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -445,12 +495,28 @@ export default function MapPage() {
         setMapInitLoading(false);
         mapRef.current = map;
 
+        // Check for query params (from post detail → map link)
+        const paramLat = searchParams.get('lat');
+        const paramLng = searchParams.get('lng');
+        const paramZoom = searchParams.get('zoom');
+        if (paramLat && paramLng) {
+          const lat = parseFloat(paramLat);
+          const lng = parseFloat(paramLng);
+          const zoom = paramZoom ? parseFloat(paramZoom) : 16;
+          if (!isNaN(lat) && !isNaN(lng)) {
+            map.flyTo({ center: [lng, lat], zoom, duration: 1500 });
+            setActiveCategory('posts');
+            return;
+          }
+        }
+
         const center = map.getCenter();
         fetchNearby(center.lat, center.lng, map.getZoom(), 'all');
       });
 
       map.on('moveend', () => {
         if (cancelled || isSearchModeRef.current) return;
+        if (activeCategoryRef.current === 'posts') return; // posts are global, no re-fetch needed
         const center = map.getCenter();
         const zoom = map.getZoom();
         setCurrentZoom(zoom);
@@ -480,6 +546,10 @@ export default function MapPage() {
       setIsSearchMode(false);
       setSearchResults([]);
       setSearchQuery('');
+    }
+    if (activeCategory === 'posts') {
+      fetchPostPlaces();
+      return;
     }
     const center = mapRef.current.getCenter();
     const zoom = mapRef.current.getZoom();
@@ -694,7 +764,9 @@ export default function MapPage() {
 
         {/* Place Detail Card */}
         {selectedPlace && (
-          <PlaceCard place={selectedPlace} onClose={() => setSelectedPlace(null)} />
+          activeCategory === 'posts'
+            ? <PostPlaceCard place={selectedPlace} onClose={() => setSelectedPlace(null)} />
+            : <PlaceCard place={selectedPlace} onClose={() => setSelectedPlace(null)} />
         )}
       </div>
 
@@ -776,6 +848,61 @@ function PlaceCard({ place, onClose }: { place: MapPlace; onClose: () => void })
           >
             導航
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══ Post Place Card (bottom sheet for post markers) ═══
+
+function PostPlaceCard({ place, onClose }: { place: MapPlace; onClose: () => void }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const posts = (place.linkedPosts || []) as any[];
+
+  return (
+    <div className="absolute bottom-[76px] left-3 right-3 z-20 animate-slide-up">
+      <div className="bg-white border border-[#E8E3DC] rounded-2xl shadow-lg overflow-hidden">
+        <div className="p-3.5">
+          <div className="flex items-start justify-between">
+            <div>
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full text-white" style={{ background: '#D4A5C8' }}>
+                ✍️ {posts.length} 篇文章
+              </span>
+              <h3 className="text-sm font-semibold text-ink font-inter mt-1.5">{place.name}</h3>
+              {place.address && <p className="text-[11px] text-taupe font-noto truncate mt-0.5">{place.address}</p>}
+            </div>
+            <button onClick={onClose} className="p-1 text-taupe hover:text-ink transition-colors ml-2">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          {/* Post list */}
+          {posts.length > 0 ? (
+            <div className="mt-3 space-y-2 max-h-48 overflow-y-auto">
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+              {posts.map((post: any) => (
+                <Link key={post.id} href={`/post/${post.id}`}
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#F5F1EC] transition-colors">
+                  {post.cover_image_url && (
+                    <img src={post.cover_image_url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-inter font-medium text-ink truncate">{post.title}</p>
+                    {post.user?.display_name && (
+                      <p className="text-[10px] text-taupe font-noto">{post.user.display_name}</p>
+                    )}
+                  </div>
+                  <svg className="w-4 h-4 text-taupe flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-taupe font-noto text-center py-3">此地點尚無文章</p>
+          )}
         </div>
       </div>
     </div>
