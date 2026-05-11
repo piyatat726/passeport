@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /auth/callback
+Sitemap: https://passeport-gamma.vercel.app/sitemap.xml

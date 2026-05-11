@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { getUserByUsername, getUserPosts, isFollowing, toggleFollow } from '@/lib/db';
+import { getUserByUsername, getUserPosts, isFollowing, toggleFollow, getUserSavedPosts, getUserLikedPosts, getOrCreateConversation } from '@/lib/db';
 import { User, Post } from '@/lib/types';
 import { BottomNav } from '@/components/bottom-nav';
+import { useTheme } from '@/lib/theme-context';
 import Link from 'next/link';
 
 export default function ProfilePage() {
@@ -17,7 +18,12 @@ export default function ProfilePage() {
   const [showMenu, setShowMenu] = useState(false);
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [savedPosts, setSavedPosts] = useState<(Post & { user: User })[]>([]);
+  const [likedPosts, setLikedPosts] = useState<(Post & { user: User })[]>([]);
+  const [savedLoaded, setSavedLoaded] = useState(false);
+  const [likedLoaded, setLikedLoaded] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
+  const { isDark, toggleTheme } = useTheme();
 
   const isOwnProfile = user?.username === username;
 
@@ -54,6 +60,26 @@ export default function ProfilePage() {
   useEffect(() => {
     loadProfile();
   }, [loadProfile]);
+
+  // Lazy load saved posts
+  useEffect(() => {
+    if (activeTab === 'saved' && !savedLoaded && isOwnProfile && user && !isDemo) {
+      getUserSavedPosts(user.id).then(data => {
+        setSavedPosts(data);
+        setSavedLoaded(true);
+      }).catch(err => console.error('Failed to load saved posts:', err));
+    }
+  }, [activeTab, savedLoaded, isOwnProfile, user, isDemo]);
+
+  // Lazy load liked posts
+  useEffect(() => {
+    if (activeTab === 'liked' && !likedLoaded && isOwnProfile && user && !isDemo) {
+      getUserLikedPosts(user.id).then(data => {
+        setLikedPosts(data);
+        setLikedLoaded(true);
+      }).catch(err => console.error('Failed to load liked posts:', err));
+    }
+  }, [activeTab, likedLoaded, isOwnProfile, user, isDemo]);
 
   const handleFollow = async () => {
     if (!user || !profileUser || isDemo) return;
@@ -149,8 +175,43 @@ export default function ProfilePage() {
                     <svg className="w-3.5 h-3.5 text-taupe" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4"/></svg>
                     編輯個人檔案
                   </Link>
-                  <div className="w-full px-4 py-3 text-left text-xs font-noto text-taupe/60 flex items-center gap-2.5">
-                    <svg className="w-3.5 h-3.5 text-taupe/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                  <Link
+                    href="/messages"
+                    onClick={() => setShowMenu(false)}
+                    className="w-full px-4 py-3 text-left text-xs font-noto text-ink hover:bg-surface transition-colors flex items-center gap-2.5"
+                  >
+                    <svg className="w-3.5 h-3.5 text-taupe" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                    我的訊息
+                  </Link>
+                  <button
+                    onClick={() => { toggleTheme(); setShowMenu(false); }}
+                    className="w-full px-4 py-3 text-left text-xs font-noto text-ink hover:bg-surface transition-colors flex items-center gap-2.5"
+                  >
+                    {isDark ? (
+                      <svg className="w-3.5 h-3.5 text-taupe" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5 text-taupe" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                    )}
+                    {isDark ? '淺色模式' : '深色模式'}
+                  </button>
+                  <div className="border-t border-border" />
+                  <Link
+                    href="/privacy"
+                    onClick={() => setShowMenu(false)}
+                    className="w-full px-4 py-3 text-left text-xs font-noto text-taupe hover:bg-surface transition-colors flex items-center gap-2.5"
+                  >
+                    <svg className="w-3.5 h-3.5 text-taupe/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                    隱私權政策
+                  </Link>
+                  <Link
+                    href="/terms"
+                    onClick={() => setShowMenu(false)}
+                    className="w-full px-4 py-3 text-left text-xs font-noto text-taupe hover:bg-surface transition-colors flex items-center gap-2.5"
+                  >
+                    <svg className="w-3.5 h-3.5 text-taupe/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+                    使用條款
+                  </Link>
+                  <div className="w-full px-4 py-2.5 text-left text-[10px] font-inter text-taupe/40 flex items-center gap-2.5">
                     PASSEPORT v1.0
                   </div>
                   <div className="border-t border-border" />
@@ -203,14 +264,14 @@ export default function ProfilePage() {
             <span className="text-lg font-inter font-semibold text-ink">{userPosts.length}</span>
             <p className="text-[10px] text-taupe tracking-wide uppercase font-inter mt-0.5">Posts</p>
           </div>
-          <div className="text-center">
-            <span className="text-lg font-inter font-semibold text-ink">{formatCount(profileUser.followers_count || 0)}</span>
+          <Link href={`/profile/${profileUser.username}/followers?tab=followers`} className="text-center group">
+            <span className="text-lg font-inter font-semibold text-ink group-hover:text-taupe transition-colors">{formatCount(profileUser.followers_count || 0)}</span>
             <p className="text-[10px] text-taupe tracking-wide uppercase font-inter mt-0.5">Followers</p>
-          </div>
-          <div className="text-center">
-            <span className="text-lg font-inter font-semibold text-ink">{formatCount(profileUser.following_count || 0)}</span>
+          </Link>
+          <Link href={`/profile/${profileUser.username}/followers?tab=following`} className="text-center group">
+            <span className="text-lg font-inter font-semibold text-ink group-hover:text-taupe transition-colors">{formatCount(profileUser.following_count || 0)}</span>
             <p className="text-[10px] text-taupe tracking-wide uppercase font-inter mt-0.5">Following</p>
-          </div>
+          </Link>
         </div>
 
         {/* Bio */}
@@ -263,7 +324,18 @@ export default function ProfilePage() {
               >
                 {following ? 'Following' : 'Follow'}
               </button>
-              <button className="px-6 py-2 border border-border text-ink text-xs tracking-editorial uppercase rounded-full font-inter">
+              <button
+                onClick={async () => {
+                  if (!user || !profileUser) return;
+                  try {
+                    const convId = await getOrCreateConversation(user.id, profileUser.id);
+                    router.push(`/messages/${convId}`);
+                  } catch (err) {
+                    console.error('Failed to start conversation:', err);
+                  }
+                }}
+                className="px-6 py-2 border border-border text-ink text-xs tracking-editorial uppercase rounded-full font-inter"
+              >
                 Message
               </button>
             </>
@@ -320,10 +392,89 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {activeTab !== 'posts' && (
+      {/* Saved Tab */}
+      {activeTab === 'saved' && isOwnProfile && (
+        <>
+          {!savedLoaded && (
+            <div className="py-16 text-center">
+              <div className="w-8 h-8 border-2 border-taupe/30 border-t-ink rounded-full animate-spin mx-auto" />
+            </div>
+          )}
+          {savedLoaded && savedPosts.length === 0 && (
+            <div className="py-16 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface flex items-center justify-center">
+                <svg className="w-6 h-6 text-taupe" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+                </svg>
+              </div>
+              <p className="text-sm text-taupe font-noto">還沒有收藏的文章</p>
+            </div>
+          )}
+          {savedLoaded && savedPosts.length > 0 && (
+            <div className="grid grid-cols-3 gap-0.5 mt-0.5">
+              {savedPosts.map(post => (
+                <Link key={post.id} href={`/post/${post.id}`} className="aspect-square overflow-hidden relative group">
+                  <img
+                    src={post.cover_image_url}
+                    alt={post.title}
+                    className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="white" stroke="none">
+                      <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+                    </svg>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Liked Tab */}
+      {activeTab === 'liked' && isOwnProfile && (
+        <>
+          {!likedLoaded && (
+            <div className="py-16 text-center">
+              <div className="w-8 h-8 border-2 border-taupe/30 border-t-ink rounded-full animate-spin mx-auto" />
+            </div>
+          )}
+          {likedLoaded && likedPosts.length === 0 && (
+            <div className="py-16 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface flex items-center justify-center">
+                <svg className="w-6 h-6 text-taupe" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                </svg>
+              </div>
+              <p className="text-sm text-taupe font-noto">還沒有喜歡的文章</p>
+            </div>
+          )}
+          {likedLoaded && likedPosts.length > 0 && (
+            <div className="grid grid-cols-3 gap-0.5 mt-0.5">
+              {likedPosts.map(post => (
+                <Link key={post.id} href={`/post/${post.id}`} className="aspect-square overflow-hidden relative group">
+                  <img
+                    src={post.cover_image_url}
+                    alt={post.title}
+                    className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="#e74c3c" stroke="none">
+                      <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                    </svg>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Saved/Liked for other users' profiles */}
+      {activeTab !== 'posts' && !isOwnProfile && (
         <div className="py-16 text-center">
           <p className="text-sm text-taupe font-noto">
-            {activeTab === 'saved' ? '還沒有收藏的文章' : '還沒有喜歡的文章'}
+            {activeTab === 'saved' ? '收藏的文章只有本人可以查看' : '喜歡的文章只有本人可以查看'}
           </p>
         </div>
       )}

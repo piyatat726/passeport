@@ -47,18 +47,19 @@ async function handleSearch(params: {
   query: string;
   lat?: number;
   lng?: number;
+  maxResults?: number;
 }) {
   const body: Record<string, unknown> = {
     textQuery: params.query,
     languageCode: 'zh-TW',
-    maxResultCount: 1,
+    maxResultCount: params.maxResults || 1,
   };
 
   if (params.lat !== undefined && params.lng !== undefined) {
     body.locationBias = {
       circle: {
         center: { latitude: params.lat, longitude: params.lng },
-        radius: 1000.0,
+        radius: 5000.0,
       },
     };
   }
@@ -81,8 +82,8 @@ async function handleSearch(params: {
   }
 
   const data = await res.json();
-  const place = data.places?.[0] || null;
-  return NextResponse.json({ place });
+  const places = data.places || [];
+  return NextResponse.json({ place: places[0] || null, places });
 }
 
 async function handleDetails(params: { googlePlaceId: string }) {

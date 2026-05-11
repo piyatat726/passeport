@@ -1,0 +1,32 @@
+{
+  "name": "PASSEPORT",
+  "short_name": "PASSEPORT",
+  "description": "把生活，寫成風格 — A fashion lifestyle magazine social app",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F4EF",
+  "theme_color": "#222222",
+  "orientation": "portrait",
+  "scope": "/",
+  "lang": "zh-Hant",
+  "categories": ["social", "lifestyle", "magazine"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

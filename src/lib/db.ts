@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/client';
-import { Post, User, Category, Comment, Place } from './types';
+import { Post, User, Category, Comment, Place, Notification, Conversation, Message } from './types';
 
 // ═══ Posts ═══
 
@@ -119,6 +119,11 @@ export async function toggleLike(userId: string, postId: string): Promise<boolea
     return false;
   } else {
     await supabase.from('likes').insert({ user_id: userId, post_id: postId });
+    // Notify post owner
+    try {
+      const { data: post } = await supabase.from('posts').select('user_id').eq('id', postId).single();
+      if (post) createNotification(post.user_id, userId, 'like', postId);
+    } catch {}
     return true;
   }
 }
@@ -148,6 +153,8 @@ export async function toggleFollow(followerId: string, followingId: string): Pro
     return false;
   } else {
     await supabase.from('follows').insert({ follower_id: followerId, following_id: followingId });
+    // Notify the person being followed
+    createNotification(followingId, followerId, 'follow');
     return true;
   }
 }
@@ -175,6 +182,13 @@ export async function addComment(postId: string, userId: string, content: string
     .single();
 
   if (error) throw error;
+
+  // Notify post owner
+  try {
+    const { data: post } = await supabase.from('posts').select('user_id').eq('id', postId).single();
+    if (post) createNotification(post.user_id, userId, 'comment', postId, content);
+  } catch {}
+
   return data;
 }
 
@@ -225,6 +239,235 @@ export async function updateUserProfile(userId: string, updates: Partial<Pick<Us
 
   if (error) throw error;
   return data as User;
+}
+
+// ═══ Following Feed ═══
+
+export async function getFollowingFeed(userId: string, page = 0, limit = 10) {
+  const supabase = createClient();
+
+  // Get IDs of users this person follows
+  const { data: followData } = await supabase
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', userId);
+
+  const followingIds = (followData || []).map(f => f.following_id);
+  if (followingIds.length === 0) return [];
+
+  const from = page * limit;
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*, user:users!posts_user_id_fkey(*)')
+    .in('user_id', followingIds)
+    .order('created_at', { ascending: false })
+    .range(from, from + limit - 1);
+
+  if (error) throw error;
+  return data as (Post & { user: User })[];
+}
+
+// ═══ Bookmarks (Collections) ═══
+
+// Get or create default "Saved" collection for a user
+async function getDefaultCollection(userId: string): Promise<string> {
+  const supabase = createClient();
+  const { data: existing } = await supabase
+    .from('collections')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('name', '已收藏')
+    .maybeSingle();
+
+  if (existing) return existing.id;
+
+  const { data, error } = await supabase
+    .from('collections')
+    .insert({ user_id: userId, name: '已收藏' })
+    .select('id')
+    .single();
+
+  if (error) throw error;
+  return data.id;
+}
+
+// Check if a post is bookmarked
+export async function isPostBookmarked(userId: string, postId: string): Promise<boolean> {
+  const supabase = createClient();
+  const collectionId = await getDefaultCollection(userId);
+  const { data } = await supabase
+    .from('collection_items')
+    .select('post_id')
+    .eq('collection_id', collectionId)
+    .eq('post_id', postId)
+    .maybeSingle();
+
+  return !!data;
+}
+
+// Toggle bookmark
+export async function toggleBookmark(userId: string, postId: string): Promise<boolean> {
+  const supabase = createClient();
+  const collectionId = await getDefaultCollection(userId);
+  const saved = await isPostBookmarked(userId, postId);
+
+  if (saved) {
+    await supabase
+      .from('collection_items')
+      .delete()
+      .eq('collection_id', collectionId)
+      .eq('post_id', postId);
+    return false;
+  } else {
+    await supabase
+      .from('collection_items')
+      .insert({ collection_id: collectionId, post_id: postId });
+    return true;
+  }
+}
+
+// Get all bookmarked post IDs for a user
+export async function getUserBookmarkedPostIds(userId: string): Promise<Set<string>> {
+  const supabase = createClient();
+  const collectionId = await getDefaultCollection(userId);
+  const { data } = await supabase
+    .from('collection_items')
+    .select('post_id')
+    .eq('collection_id', collectionId);
+
+  return new Set((data || []).map(d => d.post_id));
+}
+
+// ═══ Notifications ═══
+
+export async function createNotification(
+  recipientId: string,
+  actorId: string,
+  type: 'like' | 'comment' | 'follow',
+  postId?: string,
+  commentText?: string
+) {
+  if (recipientId === actorId) return; // Don't notify yourself
+  const supabase = createClient();
+  try {
+    await supabase.from('notifications').insert({
+      recipient_id: recipientId,
+      actor_id: actorId,
+      type,
+      post_id: postId || null,
+      comment_text: (commentText || '').slice(0, 100),
+      is_read: false,
+    });
+  } catch {
+    // Silently fail if notifications table doesn't exist yet
+  }
+}
+
+export async function getNotifications(userId: string, limit = 50): Promise<Notification[]> {
+  const supabase = createClient();
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*, actor:users!notifications_actor_id_fkey(*), post:posts!notifications_post_id_fkey(id, title, cover_image_url)')
+      .eq('recipient_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+    return (data || []) as Notification[];
+  } catch {
+    return [];
+  }
+}
+
+export async function markNotificationsRead(userId: string) {
+  const supabase = createClient();
+  try {
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('recipient_id', userId)
+      .eq('is_read', false);
+  } catch {}
+}
+
+export async function getUnreadNotificationCount(userId: string): Promise<number> {
+  const supabase = createClient();
+  try {
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('recipient_id', userId)
+      .eq('is_read', false);
+
+    if (error) return 0;
+    return count || 0;
+  } catch {
+    return 0;
+  }
+}
+
+// ═══ Followers / Following Lists ═══
+
+export async function getFollowers(userId: string): Promise<User[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('follows')
+    .select('*, follower:users!follows_follower_id_fkey(*)')
+    .eq('following_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map(d => d.follower) as User[];
+}
+
+export async function getFollowingUsers(userId: string): Promise<User[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('follows')
+    .select('*, following:users!follows_following_id_fkey(*)')
+    .eq('follower_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map(d => d.following) as User[];
+}
+
+// ═══ Saved / Liked Posts ═══
+
+export async function getUserSavedPosts(userId: string): Promise<(Post & { user: User })[]> {
+  const supabase = createClient();
+  const { data: collection } = await supabase
+    .from('collections')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('name', '已收藏')
+    .maybeSingle();
+
+  if (!collection) return [];
+
+  const { data, error } = await supabase
+    .from('collection_items')
+    .select('post:posts!collection_items_post_id_fkey(*, user:users!posts_user_id_fkey(*))')
+    .eq('collection_id', collection.id)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data || []).map((d: any) => d.post).filter(Boolean) as unknown as (Post & { user: User })[];
+}
+
+export async function getUserLikedPosts(userId: string): Promise<(Post & { user: User })[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('likes')
+    .select('post:posts!likes_post_id_fkey(*, user:users!posts_user_id_fkey(*))')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data || []).map((d: any) => d.post).filter(Boolean) as unknown as (Post & { user: User })[];
 }
 
 // ═══ Image Upload ═══
@@ -447,4 +690,204 @@ export async function getAllPlaces(limit = 2000) {
 
   if (error) throw error;
   return data as Place[];
+}
+
+// ═══ Direct Messages ═══
+
+export async function getOrCreateConversation(userId1: string, userId2: string): Promise<string> {
+  const supabase = createClient();
+  // Normalize ordering so conversation is unique regardless of who initiates
+  const [u1, u2] = [userId1, userId2].sort();
+
+  // Check existing
+  const { data: existing } = await supabase
+    .from('conversations')
+    .select('id')
+    .or(`and(user1_id.eq.${u1},user2_id.eq.${u2}),and(user1_id.eq.${u2},user2_id.eq.${u1})`)
+    .maybeSingle();
+
+  if (existing) return existing.id;
+
+  const { data, error } = await supabase
+    .from('conversations')
+    .insert({ user1_id: u1, user2_id: u2, last_message_text: '', last_message_at: new Date().toISOString() })
+    .select('id')
+    .single();
+
+  if (error) throw error;
+  return data.id;
+}
+
+export async function getConversations(userId: string): Promise<Conversation[]> {
+  const supabase = createClient();
+  try {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('*, user1:users!conversations_user1_id_fkey(*), user2:users!conversations_user2_id_fkey(*)')
+      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
+      .order('last_message_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Map to add other_user field and unread count
+    const conversations = await Promise.all((data || []).map(async (c) => {
+      const otherUser = c.user1_id === userId ? c.user2 : c.user1;
+
+      // Get unread count
+      const { count } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('conversation_id', c.id)
+        .neq('sender_id', userId)
+        .eq('is_read', false);
+
+      return {
+        id: c.id,
+        user1_id: c.user1_id,
+        user2_id: c.user2_id,
+        last_message_text: c.last_message_text,
+        last_message_at: c.last_message_at,
+        created_at: c.created_at,
+        other_user: otherUser as User,
+        unread_count: count || 0,
+      } as Conversation;
+    }));
+
+    return conversations;
+  } catch {
+    return [];
+  }
+}
+
+export async function getMessages(conversationId: string, limit = 50): Promise<Message[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*, sender:users!messages_sender_id_fkey(*)')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+    .limit(limit);
+
+  if (error) throw error;
+  return (data || []) as Message[];
+}
+
+export async function sendMessage(conversationId: string, senderId: string, content: string): Promise<Message> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('messages')
+    .insert({ conversation_id: conversationId, sender_id: senderId, content, is_read: false })
+    .select('*, sender:users!messages_sender_id_fkey(*)')
+    .single();
+
+  if (error) throw error;
+
+  // Update conversation's last message
+  await supabase
+    .from('conversations')
+    .update({ last_message_text: content.slice(0, 100), last_message_at: new Date().toISOString() })
+    .eq('id', conversationId);
+
+  return data as Message;
+}
+
+export async function markMessagesRead(conversationId: string, userId: string) {
+  const supabase = createClient();
+  await supabase
+    .from('messages')
+    .update({ is_read: true })
+    .eq('conversation_id', conversationId)
+    .neq('sender_id', userId)
+    .eq('is_read', false);
+}
+
+export async function getTotalUnreadMessages(userId: string): Promise<number> {
+  const supabase = createClient();
+  try {
+    // Get all conversation IDs for user
+    const { data: convos } = await supabase
+      .from('conversations')
+      .select('id')
+      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+
+    if (!convos || convos.length === 0) return 0;
+
+    const convoIds = convos.map(c => c.id);
+    const { count } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .in('conversation_id', convoIds)
+      .neq('sender_id', userId)
+      .eq('is_read', false);
+
+    return count || 0;
+  } catch {
+    return 0;
+  }
+}
+
+// ═══ Report / Block ═══
+
+export async function reportContent(
+  reporterId: string,
+  targetType: 'post' | 'user' | 'comment',
+  targetId: string,
+  reason: string
+) {
+  const supabase = createClient();
+  try {
+    await supabase.from('reports').insert({
+      reporter_id: reporterId,
+      target_type: targetType,
+      target_id: targetId,
+      reason,
+    });
+  } catch {
+    // Silently fail if table doesn't exist
+  }
+}
+
+export async function blockUser(blockerId: string, blockedId: string) {
+  const supabase = createClient();
+  try {
+    await supabase.from('blocks').insert({ blocker_id: blockerId, blocked_id: blockedId });
+    // Also unfollow if following
+    await supabase.from('follows').delete().eq('follower_id', blockerId).eq('following_id', blockedId);
+    await supabase.from('follows').delete().eq('follower_id', blockedId).eq('following_id', blockerId);
+  } catch {}
+}
+
+export async function unblockUser(blockerId: string, blockedId: string) {
+  const supabase = createClient();
+  try {
+    await supabase.from('blocks').delete().eq('blocker_id', blockerId).eq('blocked_id', blockedId);
+  } catch {}
+}
+
+export async function isUserBlocked(blockerId: string, blockedId: string): Promise<boolean> {
+  const supabase = createClient();
+  try {
+    const { data } = await supabase
+      .from('blocks')
+      .select('blocker_id')
+      .eq('blocker_id', blockerId)
+      .eq('blocked_id', blockedId)
+      .maybeSingle();
+    return !!data;
+  } catch {
+    return false;
+  }
+}
+
+export async function getBlockedUserIds(userId: string): Promise<Set<string>> {
+  const supabase = createClient();
+  try {
+    const { data } = await supabase
+      .from('blocks')
+      .select('blocked_id')
+      .eq('blocker_id', userId);
+    return new Set((data || []).map(d => d.blocked_id));
+  } catch {
+    return new Set();
+  }
 }

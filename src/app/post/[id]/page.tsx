@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { getPostById, isPostLiked, toggleLike, getComments, addComment, deletePost, isFollowing as checkFollowing, toggleFollow } from '@/lib/db';
+import { getPostById, isPostLiked, toggleLike, getComments, addComment, deleteComment, deletePost, isFollowing as checkFollowing, toggleFollow, isPostBookmarked, toggleBookmark } from '@/lib/db';
 import { CATEGORIES, Post, User, Comment } from '@/lib/types';
 import Link from 'next/link';
 import ConfirmDialog from '@/components/confirm-dialog';
+import { ReportModal } from '@/components/report-modal';
 import { useIsDesktop } from '@/components/desktop-frame';
 
 export default function PostDetailPage() {
@@ -25,6 +26,7 @@ export default function PostDetailPage() {
   const [pageLoading, setPageLoading] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
   const loadPost = useCallback(async () => {
     if (!id || isDemo) {
@@ -36,10 +38,14 @@ export default function PostDetailPage() {
       setPost(data);
       setLikeCount(data.likes_count || 0);
 
-      // Check like & follow status
+      // Check like, bookmark & follow status
       if (user) {
-        const liked = await isPostLiked(user.id, data.id);
+        const [liked, saved] = await Promise.all([
+          isPostLiked(user.id, data.id),
+          isPostBookmarked(user.id, data.id),
+        ]);
         setIsLiked(liked);
+        setIsSaved(saved);
         if (data.user_id !== user.id) {
           const following = await checkFollowing(user.id, data.user_id);
           setIsFollowing(following);
@@ -170,6 +176,18 @@ export default function PostDetailPage() {
                 <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" />
               </svg>
             </button>
+
+            {!isOwner && user && (
+              <button
+                onClick={() => setShowReport(true)}
+                className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center"
+              >
+                <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                  <line x1="4" y1="22" x2="4" y2="15" />
+                </svg>
+              </button>
+            )}
 
             {isOwner && (
               <div className="relative">
@@ -356,7 +374,7 @@ export default function PostDetailPage() {
           {/* Comment List */}
           <div className="space-y-4 mb-4">
             {comments.map(comment => (
-              <div key={comment.id} className="flex gap-3">
+              <div key={comment.id} className="flex gap-3 group">
                 <div className="w-8 h-8 rounded-full bg-surface flex-shrink-0 overflow-hidden">
                   {comment.user?.avatar_url ? (
                     <img src={comment.user.avatar_url} alt="" className="w-full h-full object-cover" />
@@ -367,7 +385,27 @@ export default function PostDetailPage() {
                   )}
                 </div>
                 <div className="flex-1">
-                  <p className="text-xs font-inter font-medium text-ink">{comment.user?.display_name}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-inter font-medium text-ink">{comment.user?.display_name}</p>
+                    {user?.id === comment.user_id && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await deleteComment(comment.id);
+                            setComments(prev => prev.filter(c => c.id !== comment.id));
+                          } catch (err) {
+                            console.error('Delete comment failed:', err);
+                          }
+                        }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-taupe hover:text-red-400"
+                        title="刪除留言"
+                      >
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                   <p className="text-xs text-ink/70 font-noto mt-0.5 leading-relaxed">{comment.content}</p>
                   <p className="text-[9px] text-taupe mt-1 font-inter">
                     {new Date(comment.created_at).toLocaleDateString('zh-TW')}
@@ -415,6 +453,19 @@ export default function PostDetailPage() {
         onCancel={() => setShowDeleteDialog(false)}
       />
 
+      {user && !isOwner && (
+        <ReportModal
+          isOpen={showReport}
+          onClose={() => setShowReport(false)}
+          reporterId={user.id}
+          targetType="post"
+          targetId={post.id}
+          targetName={post.user?.display_name}
+          showBlock
+          onBlocked={() => router.push('/')}
+        />
+      )}
+
       {/* Sticky Bottom Bar */}
       <div className={`${isDesktop ? 'sticky' : 'fixed left-0 right-0'} bottom-0 z-40 bg-cream/95 backdrop-blur-md border-t border-border`}>
         <div className="flex items-center justify-around h-14 px-6 max-w-lg mx-auto">
@@ -442,7 +493,16 @@ export default function PostDetailPage() {
           </button>
 
           <button
-            onClick={() => setIsSaved(!isSaved)}
+            onClick={async () => {
+              if (!user || isDemo) return;
+              const was = isSaved;
+              setIsSaved(!was);
+              try {
+                await toggleBookmark(user.id, post.id);
+              } catch {
+                setIsSaved(was);
+              }
+            }}
             className="flex items-center gap-1.5 py-2 px-3"
           >
             {isSaved ? (

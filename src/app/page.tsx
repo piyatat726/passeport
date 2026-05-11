@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { CATEGORIES, Post, User } from '@/lib/types';
 import { BottomNav } from '@/components/bottom-nav';
-import { getFeedPosts, getUserLikedPostIds, toggleLike } from '@/lib/db';
+import { getFeedPosts, getFollowingFeed, getUserLikedPostIds, toggleLike, getUnreadNotificationCount, getTotalUnreadMessages } from '@/lib/db';
 import Link from 'next/link';
 
 export default function HomePage() {
@@ -18,10 +18,20 @@ export default function HomePage() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
+  // Badge counts
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+
+  // Following tab state
+  const [followingPosts, setFollowingPosts] = useState<(Post & { user: User })[]>([]);
+  const [followingLoading, setFollowingLoading] = useState(false);
+  const [followingPage, setFollowingPage] = useState(0);
+  const [followingHasMore, setFollowingHasMore] = useState(true);
+  const [followingLoaded, setFollowingLoaded] = useState(false);
+
   // Load feed posts
   const loadPosts = useCallback(async (pageNum = 0) => {
     if (isDemo) {
-      // Demo mode: no real posts
       setFeedLoading(false);
       return;
     }
@@ -40,6 +50,29 @@ export default function HomePage() {
     }
   }, [isDemo]);
 
+  // Load following feed
+  const loadFollowingPosts = useCallback(async (pageNum = 0) => {
+    if (!user || isDemo) {
+      setFollowingLoading(false);
+      return;
+    }
+    setFollowingLoading(true);
+    try {
+      const data = await getFollowingFeed(user.id, pageNum, 10);
+      if (pageNum === 0) {
+        setFollowingPosts(data);
+      } else {
+        setFollowingPosts(prev => [...prev, ...data]);
+      }
+      setFollowingHasMore(data.length === 10);
+      setFollowingLoaded(true);
+    } catch (err) {
+      console.error('Failed to load following feed:', err);
+    } finally {
+      setFollowingLoading(false);
+    }
+  }, [user, isDemo]);
+
   // Load liked state
   const loadLikes = useCallback(async () => {
     if (!user || isDemo) return;
@@ -51,12 +84,35 @@ export default function HomePage() {
     }
   }, [user, isDemo]);
 
+  // Load unread counts
+  const loadUnread = useCallback(async () => {
+    if (!user || isDemo) return;
+    try {
+      const [notifCount, msgCount] = await Promise.all([
+        getUnreadNotificationCount(user.id),
+        getTotalUnreadMessages(user.id),
+      ]);
+      setUnreadCount(notifCount);
+      setUnreadMessages(msgCount);
+    } catch (err) {
+      console.error('Failed to load unread count:', err);
+    }
+  }, [user, isDemo]);
+
   useEffect(() => {
     if (!loading && user) {
       loadPosts(0);
       loadLikes();
+      loadUnread();
     }
-  }, [loading, user, loadPosts, loadLikes]);
+  }, [loading, user, loadPosts, loadLikes, loadUnread]);
+
+  // Load following feed when tab switches (lazy load)
+  useEffect(() => {
+    if (activeTab === 'following' && !followingLoaded && user && !isDemo) {
+      loadFollowingPosts(0);
+    }
+  }, [activeTab, followingLoaded, user, isDemo, loadFollowingPosts]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -124,9 +180,24 @@ export default function HomePage() {
           <h1 className="font-playfair italic text-2xl tracking-editorial text-ink">
             PASSEPORT
           </h1>
-          <button className="relative p-2">
-            <BellIcon className="w-5 h-5 text-ink" />
-          </button>
+          <div className="flex items-center gap-1">
+            <Link href="/messages" className="relative p-2">
+              <MessageIcon className="w-5 h-5 text-ink" />
+              {unreadMessages > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 bg-[#E8927C] text-white text-[9px] font-inter font-bold rounded-full flex items-center justify-center px-1">
+                  {unreadMessages > 99 ? '99+' : unreadMessages}
+                </span>
+              )}
+            </Link>
+            <Link href="/notifications" className="relative p-2">
+              <BellIcon className="w-5 h-5 text-ink" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 bg-[#E8927C] text-white text-[9px] font-inter font-bold rounded-full flex items-center justify-center px-1">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </Link>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -158,8 +229,15 @@ export default function HomePage() {
 
       {/* Content */}
       <div className="px-5 pt-5">
-        {/* Following tab placeholder */}
-        {activeTab === 'following' && (
+        {/* Following tab */}
+        {activeTab === 'following' && followingLoading && (
+          <div className="py-20 text-center">
+            <div className="w-8 h-8 border-2 border-taupe/30 border-t-ink rounded-full animate-spin mx-auto" />
+            <p className="text-xs text-taupe font-noto mt-4">載入中...</p>
+          </div>
+        )}
+
+        {activeTab === 'following' && !followingLoading && followingPosts.length === 0 && (
           <div className="py-20 text-center">
             <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-surface flex items-center justify-center">
               <svg className="w-8 h-8 text-taupe" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -170,12 +248,60 @@ export default function HomePage() {
               </svg>
             </div>
             <h3 className="font-playfair italic text-lg tracking-editorial text-ink mb-2">
-              COMING SOON
+              FOLLOW CREATORS
             </h3>
-            <p className="text-sm text-taupe font-noto">
+            <p className="text-sm text-taupe font-noto mb-6">
               追蹤你喜歡的創作者，這裡會顯示他們的最新文章
             </p>
+            <Link
+              href="/discover"
+              className="inline-block px-6 py-2.5 bg-ink text-cream text-xs tracking-editorial uppercase rounded-full font-inter"
+            >
+              DISCOVER
+            </Link>
           </div>
+        )}
+
+        {activeTab === 'following' && !followingLoading && followingPosts.length > 0 && (
+          <>
+            <div className="space-y-5">
+              {followingPosts.map(post => (
+                <PostCard
+                  key={post.id}
+                  post={post}
+                  isLiked={likedPosts.has(post.id)}
+                  onLike={() => handleLike(post.id)}
+                />
+              ))}
+            </div>
+
+            {followingHasMore && (
+              <div className="mt-8 text-center">
+                <button
+                  onClick={() => {
+                    const nextPage = followingPage + 1;
+                    setFollowingPage(nextPage);
+                    loadFollowingPosts(nextPage);
+                  }}
+                  className="px-6 py-2.5 border border-border text-taupe text-xs tracking-editorial uppercase rounded-full font-inter hover:border-taupe hover:text-ink transition-colors"
+                >
+                  LOAD MORE
+                </button>
+              </div>
+            )}
+
+            {!followingHasMore && followingPosts.length > 0 && (
+              <div className="mt-10 mb-8 text-center">
+                <div className="flex items-center gap-4 justify-center">
+                  <span className="w-12 h-px bg-border" />
+                  <span className="text-[10px] text-taupe tracking-[0.3em] uppercase font-inter">
+                    All Caught Up
+                  </span>
+                  <span className="w-12 h-px bg-border" />
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* Loading State */}
@@ -408,6 +534,14 @@ function HeartIcon({ className, filled }: { className?: string; filled?: boolean
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+    </svg>
+  );
+}
+
+function MessageIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
     </svg>
   );
 }

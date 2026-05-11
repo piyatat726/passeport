@@ -67,6 +67,19 @@ export interface Collection {
   cover_image_url: string;
 }
 
+export interface Notification {
+  id: string;
+  recipient_id: string;
+  actor_id: string;
+  type: 'like' | 'comment' | 'follow';
+  post_id: string | null;
+  comment_text: string;
+  is_read: boolean;
+  created_at: string;
+  actor?: User;
+  post?: { id: string; title: string; cover_image_url: string } | null;
+}
+
 export interface Comment {
   id: string;
   post_id: string;
@@ -85,5 +98,41 @@ export interface Place {
   category: string;
   mapbox_id: string;
   mention_count: number;
+  created_at: string;
+}
+
+export interface Conversation {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  last_message_text: string;
+  last_message_at: string;
+  created_at: string;
+  other_user?: User;
+  unread_count?: number;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+  is_read: boolean;
+  created_at: string;
+  sender?: User;
+}
+
+export interface Report {
+  id: string;
+  reporter_id: string;
+  target_type: 'post' | 'user' | 'comment';
+  target_id: string;
+  reason: string;
+  created_at: string;
+}
+
+export interface Block {
+  blocker_id: string;
+  blocked_id: string;
   created_at: string;
 }

@@ -305,6 +305,164 @@ CREATE INDEX IF NOT EXISTS idx_places_name ON public.places(name);
 CREATE INDEX IF NOT EXISTS idx_post_places_place_id ON public.post_places(place_id);
 
 -- ═══════════════════════════════════════
+-- NOTIFICATIONS TABLE
+-- ═══════════════════════════════════════
+
+-- Notifications table
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  recipient_id uuid REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  actor_id uuid REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  type text NOT NULL CHECK (type IN ('like', 'comment', 'follow')),
+  post_id uuid REFERENCES public.posts(id) ON DELETE CASCADE,
+  comment_text text DEFAULT '',
+  is_read boolean DEFAULT false,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+-- Notifications policies
+DO $$ BEGIN
+  CREATE POLICY "Users can view own notifications" ON public.notifications FOR SELECT USING (auth.uid() = recipient_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Authenticated users can create notifications" ON public.notifications FOR INSERT WITH CHECK (auth.uid() = actor_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can update own notifications" ON public.notifications FOR UPDATE USING (auth.uid() = recipient_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can delete own notifications" ON public.notifications FOR DELETE USING (auth.uid() = recipient_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Notifications indexes
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON public.notifications(recipient_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_actor ON public.notifications(actor_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON public.notifications(recipient_id) WHERE is_read = false;
+
+-- ═══════════════════════════════════════
+-- DIRECT MESSAGES
+-- ═══════════════════════════════════════
+
+-- Conversations table
+CREATE TABLE IF NOT EXISTS public.conversations (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user1_id uuid REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  user2_id uuid REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  last_message_text text DEFAULT '',
+  last_message_at timestamptz DEFAULT now() NOT NULL,
+  created_at timestamptz DEFAULT now() NOT NULL,
+  UNIQUE(user1_id, user2_id)
+);
+
+-- Messages table
+CREATE TABLE IF NOT EXISTS public.messages (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  conversation_id uuid REFERENCES public.conversations(id) ON DELETE CASCADE NOT NULL,
+  sender_id uuid REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  content text NOT NULL,
+  is_read boolean DEFAULT false,
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
+-- Conversations policies
+DO $$ BEGIN
+  CREATE POLICY "Users can view own conversations" ON public.conversations FOR SELECT
+    USING (auth.uid() = user1_id OR auth.uid() = user2_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can create conversations" ON public.conversations FOR INSERT
+    WITH CHECK (auth.uid() = user1_id OR auth.uid() = user2_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can update own conversations" ON public.conversations FOR UPDATE
+    USING (auth.uid() = user1_id OR auth.uid() = user2_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Messages policies
+DO $$ BEGIN
+  CREATE POLICY "Users can view messages in own conversations" ON public.messages FOR SELECT
+    USING (EXISTS (
+      SELECT 1 FROM public.conversations c
+      WHERE c.id = conversation_id AND (c.user1_id = auth.uid() OR c.user2_id = auth.uid())
+    ));
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can send messages" ON public.messages FOR INSERT
+    WITH CHECK (auth.uid() = sender_id AND EXISTS (
+      SELECT 1 FROM public.conversations c
+      WHERE c.id = conversation_id AND (c.user1_id = auth.uid() OR c.user2_id = auth.uid())
+    ));
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can update messages in own conversations" ON public.messages FOR UPDATE
+    USING (EXISTS (
+      SELECT 1 FROM public.conversations c
+      WHERE c.id = conversation_id AND (c.user1_id = auth.uid() OR c.user2_id = auth.uid())
+    ));
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- DM indexes
+CREATE INDEX IF NOT EXISTS idx_conversations_user1 ON public.conversations(user1_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_user2 ON public.conversations(user2_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_last_msg ON public.conversations(last_message_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation ON public.messages(conversation_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_messages_unread ON public.messages(conversation_id, sender_id) WHERE is_read = false;
+
+-- ═══════════════════════════════════════
+-- REPORTS & BLOCKS
+-- ═══════════════════════════════════════
+
+-- Reports table
+CREATE TABLE IF NOT EXISTS public.reports (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  reporter_id uuid REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  target_type text NOT NULL CHECK (target_type IN ('post', 'user', 'comment')),
+  target_id text NOT NULL,
+  reason text DEFAULT '',
+  created_at timestamptz DEFAULT now() NOT NULL
+);
+
+-- Blocks table
+CREATE TABLE IF NOT EXISTS public.blocks (
+  blocker_id uuid REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  blocked_id uuid REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+  created_at timestamptz DEFAULT now() NOT NULL,
+  PRIMARY KEY (blocker_id, blocked_id),
+  CHECK (blocker_id != blocked_id)
+);
+
+ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.blocks ENABLE ROW LEVEL SECURITY;
+
+-- Reports policies
+DO $$ BEGIN
+  CREATE POLICY "Users can create reports" ON public.reports FOR INSERT WITH CHECK (auth.uid() = reporter_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can view own reports" ON public.reports FOR SELECT USING (auth.uid() = reporter_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Blocks policies
+DO $$ BEGIN
+  CREATE POLICY "Users can view own blocks" ON public.blocks FOR SELECT USING (auth.uid() = blocker_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can block others" ON public.blocks FOR INSERT WITH CHECK (auth.uid() = blocker_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN
+  CREATE POLICY "Users can unblock others" ON public.blocks FOR DELETE USING (auth.uid() = blocker_id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Blocks indexes
+CREATE INDEX IF NOT EXISTS idx_blocks_blocker ON public.blocks(blocker_id);
+CREATE INDEX IF NOT EXISTS idx_blocks_blocked ON public.blocks(blocked_id);
+
+-- ═══════════════════════════════════════
 -- FUNCTION: Auto-update mention_count on places
 -- ═══════════════════════════════════════
 

@@ -356,9 +356,16 @@ function AuthPageInner() {
           EXPLORE AS GUEST
         </button>
 
-        <p className="mt-12 text-center text-[10px] text-taupe/50 font-inter tracking-widest uppercase">
-          A lifestyle magazine in your pocket
-        </p>
+        <div className="mt-10 text-center space-y-2">
+          <p className="text-[10px] text-taupe/50 font-inter tracking-widest uppercase">
+            A lifestyle magazine in your pocket
+          </p>
+          <div className="flex justify-center gap-3 text-[10px] text-taupe/40 font-inter">
+            <a href="/privacy" className="hover:text-taupe transition-colors">隱私權政策</a>
+            <span>·</span>
+            <a href="/terms" className="hover:text-taupe transition-colors">使用條款</a>
+          </div>
+        </div>
       </div>
     </div>
   );

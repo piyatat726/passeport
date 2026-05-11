@@ -9,11 +9,11 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        cream: "#F7F4EF",
-        surface: "#EDE8E1",
-        border: "#DCCFC1",
-        taupe: "#B8A898",
-        ink: "#222222",
+        cream: "var(--cream)",
+        surface: "var(--surface)",
+        border: "var(--border)",
+        taupe: "var(--taupe)",
+        ink: "var(--ink)",
       },
       fontFamily: {
         playfair: ['"Playfair Display"', "serif"],

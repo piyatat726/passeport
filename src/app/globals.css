@@ -14,6 +14,24 @@
   --ink: #222222;
 }
 
+html.dark {
+  --cream: #1A1816;
+  --surface: #252220;
+  --border: #3A3530;
+  --taupe: #8B8078;
+  --ink: #E8E0D8;
+}
+
+html.dark body {
+  color: var(--ink);
+  background: var(--cream);
+}
+
+html.dark ::selection {
+  background: #6B5D4F;
+  color: #F7F4EF;
+}
+
 * {
   box-sizing: border-box;
 }

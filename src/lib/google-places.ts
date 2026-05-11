@@ -94,6 +94,37 @@ export async function searchPlace(
 }
 
 /**
+ * Text search for places. Returns multiple matching results.
+ */
+export async function searchPlaces(
+  query: string,
+  lat?: number,
+  lng?: number,
+  maxResults = 5
+): Promise<GooglePlace[]> {
+  const cacheKey = `searchMulti:${query}:${lat?.toFixed(2)}:${lng?.toFixed(2)}:${maxResults}`;
+  const cached = getCached<GooglePlace[]>(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const res = await fetch('/api/places', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'search', query, lat, lng, maxResults }),
+    });
+
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const places = data.places || [];
+    if (places.length) setCache(cacheKey, places);
+    return places;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Get full details for a place by its Google Place ID.
  */
 export async function getPlaceDetails(
