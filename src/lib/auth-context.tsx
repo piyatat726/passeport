@@ -33,7 +33,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const saved = localStorage.getItem('passeport_demo_user');
       if (saved) {
-        setUser(JSON.parse(saved));
+        // Always use latest SEED_USER data (in case seed data changed)
+        setUser(SEED_USER);
+        localStorage.setItem('passeport_demo_user', JSON.stringify(SEED_USER));
         setIsDemo(true);
         setLoading(false);
         return; // Demo user found, skip Supabase
