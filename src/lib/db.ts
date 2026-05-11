@@ -9,7 +9,7 @@ export async function getFeedPosts(page = 0, limit = 10) {
   const from = page * limit;
   const { data, error } = await supabase
     .from('posts')
-    .select('*, user:users(*)')
+    .select('*, user:users!posts_user_id_fkey(*)')
     .order('created_at', { ascending: false })
     .range(from, from + limit - 1);
 
@@ -22,7 +22,7 @@ export async function getPostById(postId: string) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('posts')
-    .select('*, user:users(*)')
+    .select('*, user:users!posts_user_id_fkey(*)')
     .eq('id', postId)
     .single();
 
@@ -35,7 +35,7 @@ export async function getUserPosts(userId: string) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('posts')
-    .select('*, user:users(*)')
+    .select('*, user:users!posts_user_id_fkey(*)')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
@@ -65,7 +65,7 @@ export async function createPost(post: {
       location: post.location || '',
       tags: post.tags || [],
     })
-    .select('*, user:users(*)')
+    .select('*, user:users!posts_user_id_fkey(*)')
     .single();
 
   if (error) throw error;
@@ -158,7 +158,7 @@ export async function getComments(postId: string) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('comments')
-    .select('*, user:users(*)')
+    .select('*, user:users!comments_user_id_fkey(*)')
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
 
@@ -171,7 +171,7 @@ export async function addComment(postId: string, userId: string, content: string
   const { data, error } = await supabase
     .from('comments')
     .insert({ post_id: postId, user_id: userId, content })
-    .select('*, user:users(*)')
+    .select('*, user:users!comments_user_id_fkey(*)')
     .single();
 
   if (error) throw error;
@@ -311,7 +311,7 @@ export async function updatePost(postId: string, updates: Partial<Pick<Post,
     .from('posts')
     .update(updates)
     .eq('id', postId)
-    .select('*, user:users(*)')
+    .select('*, user:users!posts_user_id_fkey(*)')
     .single();
 
   if (error) throw error;
@@ -324,7 +324,7 @@ export async function searchPosts(query: string, limit = 20) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('posts')
-    .select('*, user:users(*)')
+    .select('*, user:users!posts_user_id_fkey(*)')
     .or(`title.ilike.%${query}%,content.ilike.%${query}%,location.ilike.%${query}%`)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -337,7 +337,7 @@ export async function searchPostsByTag(tag: string, limit = 20) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('posts')
-    .select('*, user:users(*)')
+    .select('*, user:users!posts_user_id_fkey(*)')
     .contains('tags', [tag])
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -410,7 +410,7 @@ export async function getPostsByPlace(placeId: string) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('post_places')
-    .select('posts:post_id(*, user:users(*))')
+    .select('posts:post_id(*, user:users!posts_user_id_fkey(*))')
     .eq('place_id', placeId);
 
   if (error) throw error;
