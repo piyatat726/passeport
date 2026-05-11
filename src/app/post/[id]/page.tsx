@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { getPostById, isPostLiked, toggleLike, getComments, addComment } from '@/lib/db';
+import { getPostById, isPostLiked, toggleLike, getComments, addComment, deletePost } from '@/lib/db';
 import { CATEGORIES, Post, User, Comment } from '@/lib/types';
 import Link from 'next/link';
+import ConfirmDialog from '@/components/confirm-dialog';
 
 export default function PostDetailPage() {
   const { id } = useParams();
@@ -20,6 +21,8 @@ export default function PostDetailPage() {
   const [commentText, setCommentText] = useState('');
   const [showComments, setShowComments] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
+  const [showMenu, setShowMenu] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const loadPost = useCallback(async () => {
     if (!id || isDemo) {
@@ -109,6 +112,17 @@ export default function PostDetailPage() {
     }
   };
 
+  const isOwner = user?.id === post.user_id;
+
+  const handleDelete = async () => {
+    try {
+      await deletePost(post.id);
+      router.push('/');
+    } catch (err) {
+      console.error('Failed to delete post:', err);
+    }
+  };
+
   const paragraphs = post.content.split('\n\n').filter(Boolean);
 
   const formatDate = (dateStr: string) => {
@@ -137,14 +151,55 @@ export default function PostDetailPage() {
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
-          <button
-            onClick={handleShare}
-            className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center"
-          >
-            <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleShare}
+              className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center"
+            >
+              <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" />
+              </svg>
+            </button>
+
+            {isOwner && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowMenu(!showMenu)}
+                  className="w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center"
+                >
+                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="5" r="1.5" />
+                    <circle cx="12" cy="12" r="1.5" />
+                    <circle cx="12" cy="19" r="1.5" />
+                  </svg>
+                </button>
+
+                {showMenu && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShowMenu(false)} />
+                    <div className="absolute right-0 top-11 z-40 bg-surface border border-border rounded-xl shadow-lg overflow-hidden min-w-[140px]">
+                      <Link
+                        href={`/post/${post.id}/edit`}
+                        className="block px-4 py-3 text-sm font-noto text-ink hover:bg-cream transition-colors"
+                        onClick={() => setShowMenu(false)}
+                      >
+                        編輯文章
+                      </Link>
+                      <button
+                        onClick={() => {
+                          setShowMenu(false);
+                          setShowDeleteDialog(true);
+                        }}
+                        className="block w-full text-left px-4 py-3 text-sm font-noto text-red-500 hover:bg-cream transition-colors"
+                      >
+                        刪除文章
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Title Overlay */}
@@ -328,6 +383,18 @@ export default function PostDetailPage() {
           )}
         </div>
       )}
+
+      {/* Delete Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteDialog}
+        title="刪除文章"
+        message="確定要刪除這篇文章嗎？此操作無法復原。"
+        confirmLabel="刪除"
+        cancelLabel="取消"
+        danger
+        onConfirm={handleDelete}
+        onCancel={() => setShowDeleteDialog(false)}
+      />
 
       {/* Sticky Bottom Bar */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-cream/95 backdrop-blur-md border-t border-border">

@@ -2,12 +2,26 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { BottomNav } from '@/components/bottom-nav';
-import { SEED_PLACES, PLACE_CATEGORIES, CITY_CENTERS, Place } from '@/lib/places-data';
-import { SEED_POSTS } from '@/lib/seed-data';
+import { getPlacesWithCoords } from '@/lib/db';
+import { Place } from '@/lib/types';
 import Link from 'next/link';
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 const hasMapbox = MAPBOX_TOKEN.length > 0 && !MAPBOX_TOKEN.includes('placeholder');
+
+const PLACE_CATEGORIES = [
+  { value: 'all', label: '全部', icon: '📍' },
+  { value: 'restaurant', label: '餐廳', icon: '🍽️' },
+  { value: 'cafe', label: '咖啡', icon: '☕' },
+  { value: 'snack', label: '小吃', icon: '🍜' },
+  { value: 'attraction', label: '景點', icon: '🏛️' },
+  { value: 'shop', label: '潮流店', icon: '🛍️' },
+  { value: 'bar', label: '酒吧', icon: '🍸' },
+  { value: 'cafe_journal', label: '咖啡誌', icon: '☕' },
+  { value: 'table_taste', label: '餐桌風景', icon: '🍽️' },
+  { value: 'city_guide', label: '城市指南', icon: '🏙️' },
+  { value: 'travel_notes', label: '旅行筆記', icon: '✈️' },
+] as const;
 
 export default function MapPage() {
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -16,14 +30,31 @@ export default function MapPage() {
   const [activeCategory, setActiveCategory] = useState('all');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCity, setSelectedCity] = useState('Taipei');
   const [showList, setShowList] = useState(false);
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredPlaces = SEED_PLACES.filter(p => {
+  // Load real places from DB
+  useEffect(() => {
+    const loadPlaces = async () => {
+      try {
+        const data = await getPlacesWithCoords();
+        setPlaces(data);
+      } catch (err) {
+        console.error('Failed to load places:', err);
+        setPlaces([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadPlaces();
+  }, []);
+
+  const filteredPlaces = places.filter(p => {
     const matchCat = activeCategory === 'all' || p.category === activeCategory;
     const matchSearch = searchQuery === '' ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.nameZh.includes(searchQuery);
+      p.address.toLowerCase().includes(searchQuery.toLowerCase());
     return matchCat && matchSearch;
   });
 
@@ -37,6 +68,8 @@ export default function MapPage() {
     markersRef.current = [];
 
     filteredPlaces.forEach(place => {
+      if (place.latitude === null || place.longitude === null) return;
+
       const catInfo = PLACE_CATEGORIES.find(c => c.value === place.category);
       const el = document.createElement('div');
       el.className = 'passeport-marker';
@@ -58,14 +91,14 @@ export default function MapPage() {
       el.addEventListener('click', () => setSelectedPlace(place));
 
       const marker = new mapboxgl.Marker({ element: el })
-        .setLngLat([place.lng, place.lat])
+        .setLngLat([place.longitude!, place.latitude!])
         .addTo(mapInstance);
       markersRef.current.push(marker);
     });
   };
 
   useEffect(() => {
-    if (!hasMapbox) return;
+    if (!hasMapbox || loading) return;
     let cancelled = false;
 
     const initMap = async () => {
@@ -78,7 +111,14 @@ export default function MapPage() {
       // Clear any leftover DOM
       container.innerHTML = '';
 
-      const center = CITY_CENTERS[selectedCity] || CITY_CENTERS['Taipei'];
+      // Default center: Taipei
+      const defaultCenter = { lng: 121.5654, lat: 25.0330, zoom: 12 };
+
+      // If we have places, center on first place
+      const firstPlace = filteredPlaces[0];
+      const center = firstPlace && firstPlace.longitude && firstPlace.latitude
+        ? { lng: firstPlace.longitude, lat: firstPlace.latitude, zoom: 12 }
+        : defaultCenter;
 
       const map = new mapboxgl.Map({
         container: 'passeport-map',
@@ -105,40 +145,33 @@ export default function MapPage() {
       mapRef.current = null;
       setMapLoaded(false);
     };
-  }, [selectedCity]);
+  }, [loading]);
 
   useEffect(() => {
     if (mapLoaded) addMarkers();
-  }, [activeCategory, searchQuery, mapLoaded]);
-
-  const flyToCity = (city: string) => {
-    setSelectedCity(city);
-    setSelectedPlace(null);
-    const center = CITY_CENTERS[city];
-    if (center && mapRef.current) {
-      mapRef.current.flyTo({ center: [center.lng, center.lat], zoom: center.zoom, duration: 1500 });
-    }
-  };
+  }, [activeCategory, searchQuery, mapLoaded, filteredPlaces.length]);
 
   const flyToPlace = (place: Place) => {
+    if (place.latitude === null || place.longitude === null) return;
     setSelectedPlace(place);
     setShowList(false);
     if (mapRef.current) {
-      mapRef.current.flyTo({ center: [place.lng, place.lat], zoom: 15, duration: 1000 });
+      mapRef.current.flyTo({ center: [place.longitude, place.latitude], zoom: 15, duration: 1000 });
     }
   };
 
   // Fallback if no Mapbox token
   if (!hasMapbox) {
-    return <MapFallback
-      places={filteredPlaces}
-      activeCategory={activeCategory}
-      setActiveCategory={setActiveCategory}
-      selectedPlace={selectedPlace}
-      setSelectedPlace={setSelectedPlace}
-      selectedCity={selectedCity}
-      flyToCity={flyToCity}
-    />;
+    return (
+      <MapFallback
+        places={filteredPlaces}
+        loading={loading}
+        activeCategory={activeCategory}
+        setActiveCategory={setActiveCategory}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+      />
+    );
   }
 
   return (
@@ -165,25 +198,8 @@ export default function MapPage() {
           </button>
         </div>
 
-        {/* City Chips */}
-        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-          {Object.keys(CITY_CENTERS).map(city => (
-            <button
-              key={city}
-              onClick={() => flyToCity(city)}
-              className={`flex-shrink-0 px-3 py-1 rounded-full text-[11px] font-inter tracking-wide transition-colors ${
-                selectedCity === city
-                  ? 'bg-ink text-cream'
-                  : 'bg-surface text-taupe border border-border'
-              }`}
-            >
-              {city}
-            </button>
-          ))}
-        </div>
-
         {/* Category Filters */}
-        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar mt-1">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           {PLACE_CATEGORIES.map(cat => (
             <button
               key={cat.value}
@@ -203,6 +219,11 @@ export default function MapPage() {
 
       {/* Map */}
       <div className="flex-1 relative">
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-cream/80 z-10">
+            <div className="w-5 h-5 border-2 border-ink border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
         <div id="passeport-map" className="absolute inset-0" />
 
         {/* List View */}
@@ -222,6 +243,9 @@ export default function MapPage() {
               {filteredPlaces.map(place => (
                 <PlaceListItem key={place.id} place={place} onClick={() => flyToPlace(place)} />
               ))}
+              {filteredPlaces.length === 0 && (
+                <p className="text-center text-sm text-taupe font-noto py-8">沒有找到符合的地點</p>
+              )}
             </div>
           </div>
         )}
@@ -239,61 +263,42 @@ export default function MapPage() {
 
 function PlaceCard({ place, onClose }: { place: Place; onClose: () => void }) {
   const catInfo = PLACE_CATEGORIES.find(c => c.value === place.category);
-  const relatedPost = SEED_POSTS.find(p =>
-    p.location.toLowerCase().includes(place.city.toLowerCase())
-  );
 
   return (
     <div className="absolute bottom-2 left-3 right-3 z-20 animate-slide-up">
       <div className="bg-cream border border-border rounded-xl shadow-lg overflow-hidden">
-        <div className="flex gap-3 p-3">
-          <img
-            src={place.image}
-            alt={place.name}
-            className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
-          />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[9px] text-taupe tracking-wider uppercase font-inter">
-                  {catInfo?.icon} {catInfo?.label}
-                </span>
-                <h3 className="text-sm font-medium text-ink font-inter truncate mt-0.5">
-                  {place.name}
-                </h3>
-                <p className="text-[11px] text-taupe font-noto">{place.nameZh}</p>
-              </div>
-              <button onClick={onClose} className="p-1 text-taupe">
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex items-center gap-3 mt-2">
-              {place.rating && (
-                <span className="text-[10px] text-ink font-inter flex items-center gap-0.5">
-                  ⭐ {place.rating}
-                </span>
-              )}
-              <span className="text-[10px] text-taupe font-inter">
-                📝 {place.postCount} 篇文章
+        <div className="p-3">
+          <div className="flex items-start justify-between">
+            <div className="flex-1 min-w-0">
+              <span className="text-[9px] text-taupe tracking-wider uppercase font-inter">
+                {catInfo?.icon || '📍'} {catInfo?.label || place.category}
               </span>
+              <h3 className="text-sm font-medium text-ink font-inter truncate mt-0.5">
+                {place.name}
+              </h3>
+              {place.address && (
+                <p className="text-[11px] text-taupe font-noto truncate mt-0.5">{place.address}</p>
+              )}
             </div>
+            <button onClick={onClose} className="p-1 text-taupe ml-2">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex items-center gap-3 mt-2">
+            <span className="text-[10px] text-taupe font-inter">
+              被提及 {place.mention_count} 次
+            </span>
           </div>
         </div>
         <div className="px-3 pb-3 flex gap-2">
-          {relatedPost ? (
-            <Link
-              href={`/post/${relatedPost.id}`}
-              className="flex-1 py-2 bg-ink text-cream text-[11px] text-center rounded-lg tracking-editorial uppercase font-inter"
-            >
-              VIEW STORIES
-            </Link>
-          ) : (
-            <button className="flex-1 py-2 bg-ink text-cream text-[11px] text-center rounded-lg tracking-editorial uppercase font-inter">
-              VIEW STORIES
-            </button>
-          )}
+          <Link
+            href={`/place/${place.id}`}
+            className="flex-1 py-2 bg-ink text-cream text-[11px] text-center rounded-lg tracking-editorial uppercase font-inter"
+          >
+            VIEW STORIES
+          </Link>
           <button className="px-4 py-2 border border-border text-ink text-[11px] rounded-lg tracking-editorial uppercase font-inter">
             SAVE
           </button>
@@ -307,35 +312,34 @@ function PlaceListItem({ place, onClick }: { place: Place; onClick: () => void }
   const catInfo = PLACE_CATEGORIES.find(c => c.value === place.category);
   return (
     <button onClick={onClick} className="w-full flex gap-3 p-3 bg-surface/50 rounded-xl text-left hover:bg-surface transition-colors">
-      <img src={place.image} alt="" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
+      <div className="w-14 h-14 rounded-lg bg-surface border border-border flex items-center justify-center flex-shrink-0">
+        <span className="text-xl">{catInfo?.icon || '📍'}</span>
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs">{catInfo?.icon}</span>
-          <span className="text-[10px] text-taupe font-inter tracking-wide">{place.city}</span>
+          <span className="text-[10px] text-taupe font-inter tracking-wide">{catInfo?.label || place.category}</span>
         </div>
         <p className="text-sm text-ink font-inter font-medium truncate">{place.name}</p>
-        <p className="text-[11px] text-taupe font-noto">{place.nameZh}</p>
+        {place.address && (
+          <p className="text-[11px] text-taupe font-noto truncate">{place.address}</p>
+        )}
       </div>
       <div className="flex flex-col items-end justify-center">
-        {place.rating && <span className="text-[10px] text-ink font-inter">⭐ {place.rating}</span>}
-        <span className="text-[9px] text-taupe font-inter">{place.postCount} 篇</span>
+        <span className="text-[9px] text-taupe font-inter">{place.mention_count} 次提及</span>
       </div>
     </button>
   );
 }
 
 // Fallback when no Mapbox token
-function MapFallback({ places, activeCategory, setActiveCategory, selectedPlace, setSelectedPlace, selectedCity, flyToCity }: {
+function MapFallback({ places, loading, activeCategory, setActiveCategory, searchQuery, setSearchQuery }: {
   places: Place[];
+  loading: boolean;
   activeCategory: string;
   setActiveCategory: (c: string) => void;
-  selectedPlace: Place | null;
-  setSelectedPlace: (p: Place | null) => void;
-  selectedCity: string;
-  flyToCity: (c: string) => void;
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
 }) {
-  const cityPlaces = places.filter(p => p.city === selectedCity);
-
   return (
     <div className="min-h-screen bg-cream flex flex-col">
       {/* Header */}
@@ -344,23 +348,23 @@ function MapFallback({ places, activeCategory, setActiveCategory, selectedPlace,
           MAP
         </h1>
 
-        {/* City Chips */}
-        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-          {Object.keys(CITY_CENTERS).map(city => (
-            <button
-              key={city}
-              onClick={() => flyToCity(city)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-[11px] font-inter tracking-wide transition-colors ${
-                selectedCity === city ? 'bg-ink text-cream' : 'bg-surface text-taupe border border-border'
-              }`}
-            >
-              {city}
-            </button>
-          ))}
+        {/* Search */}
+        <div className="flex items-center gap-2 px-3 py-2.5 bg-surface border border-border rounded-xl mb-3">
+          <svg className="w-4 h-4 text-taupe flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+          <input
+            type="text"
+            placeholder="搜尋餐廳、景點、咖啡廳⋯⋯"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-transparent text-sm text-ink placeholder:text-taupe/50 focus:outline-none font-noto"
+          />
         </div>
 
         {/* Category Filters */}
-        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar mt-2">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           {PLACE_CATEGORIES.map(cat => (
             <button
               key={cat.value}
@@ -376,7 +380,7 @@ function MapFallback({ places, activeCategory, setActiveCategory, selectedPlace,
         </div>
       </div>
 
-      {/* Mapbox 提示 */}
+      {/* Mapbox notice */}
       <div className="mx-5 mt-4 p-3 bg-surface/60 rounded-lg border border-border">
         <p className="text-[11px] text-taupe font-noto text-center">
           🗺️ 設定 <span className="font-inter font-medium">NEXT_PUBLIC_MAPBOX_TOKEN</span> 即可啟用互動地圖
@@ -387,26 +391,41 @@ function MapFallback({ places, activeCategory, setActiveCategory, selectedPlace,
       <div className="flex-1 px-5 pt-4 pb-20">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-playfair italic text-base tracking-editorial text-ink">
-            {selectedCity.toUpperCase()}
+            ALL PLACES
           </h2>
-          <span className="text-[10px] text-taupe font-inter">{cityPlaces.length} 個地點</span>
+          <span className="text-[10px] text-taupe font-inter">{places.length} 個地點</span>
         </div>
-        <div className="space-y-3">
-          {cityPlaces.map(place => (
-            <PlaceListItem key={place.id} place={place} onClick={() => setSelectedPlace(place)} />
-          ))}
-          {cityPlaces.length === 0 && (
-            <p className="text-center text-sm text-taupe font-noto py-8">此城市尚無地點資料</p>
-          )}
-        </div>
-      </div>
 
-      {/* Place Card */}
-      {selectedPlace && (
-        <div className="fixed bottom-16 left-3 right-3 z-30">
-          <PlaceCard place={selectedPlace} onClose={() => setSelectedPlace(null)} />
-        </div>
-      )}
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <div className="w-5 h-5 border-2 border-ink border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {places.map(place => (
+              <Link key={place.id} href={`/place/${place.id}`} className="block">
+                <div className="w-full flex gap-3 p-3 bg-surface/50 rounded-xl text-left hover:bg-surface transition-colors">
+                  <div className="w-14 h-14 rounded-lg bg-surface border border-border flex items-center justify-center flex-shrink-0">
+                    <span className="text-xl">{PLACE_CATEGORIES.find(c => c.value === place.category)?.icon || '📍'}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-ink font-inter font-medium truncate">{place.name}</p>
+                    {place.address && (
+                      <p className="text-[11px] text-taupe font-noto truncate">{place.address}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end justify-center">
+                    <span className="text-[9px] text-taupe font-inter">{place.mention_count} 次提及</span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+            {places.length === 0 && !loading && (
+              <p className="text-center text-sm text-taupe font-noto py-8">目前沒有地點資料</p>
+            )}
+          </div>
+        )}
+      </div>
 
       <BottomNav />
     </div>

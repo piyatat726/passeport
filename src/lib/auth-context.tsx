@@ -18,6 +18,7 @@ interface AuthState {
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   demoLogin: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -203,6 +204,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const refreshUser = async () => {
+    if (isDemo || !user) return;
+    try {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      if (data) setUser(data);
+    } catch (err) {
+      console.error('Failed to refresh user:', err);
+    }
+  };
+
   const demoLogin = () => {
     setUser(SEED_USER);
     setIsDemo(true);
@@ -220,6 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signOut,
       resetPassword,
       demoLogin,
+      refreshUser,
     }}>
       {children}
     </AuthContext.Provider>

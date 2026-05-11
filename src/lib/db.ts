@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/client';
-import { Post, User, Category, Comment } from './types';
+import { Post, User, Category, Comment, Place } from './types';
 
 // ═══ Posts ═══
 
@@ -298,4 +298,147 @@ export async function linkPostToPlace(postId: string, placeId: string) {
     .insert({ post_id: postId, place_id: placeId });
 
   if (error && !error.message.includes('duplicate')) throw error;
+}
+
+// ═══ Post Edit ═══
+
+export async function updatePost(postId: string, updates: Partial<Pick<Post,
+  'title' | 'subtitle' | 'content' | 'category' | 'cover_image_url' |
+  'additional_images' | 'location' | 'tags'
+>>) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('posts')
+    .update(updates)
+    .eq('id', postId)
+    .select('*, user:users(*)')
+    .single();
+
+  if (error) throw error;
+  return data as Post & { user: User };
+}
+
+// ═══ Search ═══
+
+export async function searchPosts(query: string, limit = 20) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*, user:users(*)')
+    .or(`title.ilike.%${query}%,content.ilike.%${query}%,location.ilike.%${query}%`)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data as (Post & { user: User })[];
+}
+
+export async function searchPostsByTag(tag: string, limit = 20) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*, user:users(*)')
+    .contains('tags', [tag])
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data as (Post & { user: User })[];
+}
+
+export async function searchUsers(query: string, limit = 10) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+    .limit(limit);
+
+  if (error) throw error;
+  return data as User[];
+}
+
+export async function searchPlaces(query: string, limit = 10) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('places')
+    .select('*')
+    .or(`name.ilike.%${query}%,address.ilike.%${query}%`)
+    .order('mention_count', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data as Place[];
+}
+
+export async function getPopularTags(limit = 20): Promise<string[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('posts')
+    .select('tags')
+    .order('created_at', { ascending: false })
+    .limit(100);
+
+  if (error) throw error;
+  const tagCount: Record<string, number> = {};
+  (data || []).forEach(post => {
+    (post.tags || []).forEach((tag: string) => {
+      tagCount[tag] = (tagCount[tag] || 0) + 1;
+    });
+  });
+  return Object.entries(tagCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([tag]) => tag);
+}
+
+// ═══ Place Detail ═══
+
+export async function getPlaceById(placeId: string) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('places')
+    .select('*')
+    .eq('id', placeId)
+    .single();
+
+  if (error) throw error;
+  return data as Place;
+}
+
+export async function getPostsByPlace(placeId: string) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('post_places')
+    .select('posts:post_id(*, user:users(*))')
+    .eq('place_id', placeId);
+
+  if (error) throw error;
+  return (data || []).map((d: Record<string, unknown>) => d.posts).filter(Boolean) as (Post & { user: User })[];
+}
+
+export async function getPlacesWithCoords(limit = 50) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('places')
+    .select('*')
+    .not('latitude', 'is', null)
+    .not('longitude', 'is', null)
+    .order('mention_count', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data as Place[];
+}
+
+export async function getAllPlaces(limit = 100) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('places')
+    .select('*')
+    .order('mention_count', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data as Place[];
 }

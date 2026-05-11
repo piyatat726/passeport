@@ -234,9 +234,12 @@ export default function ProfilePage() {
         <div className="flex justify-center gap-3 mt-5">
           {isOwnProfile ? (
             <>
-              <button className="px-6 py-2 bg-ink text-cream text-xs tracking-editorial uppercase rounded-full font-inter">
+              <Link
+                href={`/profile/${profileUser.username}/edit`}
+                className="px-6 py-2 bg-ink text-cream text-xs tracking-editorial uppercase rounded-full font-inter"
+              >
                 Edit Profile
-              </button>
+              </Link>
               <Link
                 href="/create"
                 className="px-6 py-2 border border-border text-ink text-xs tracking-editorial uppercase rounded-full font-inter"

@@ -58,7 +58,13 @@ export default function HomePage() {
     }
   }, [loading, user, loadPosts, loadLikes]);
 
-  if (loading) {
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/auth');
+    }
+  }, [loading, user, router]);
+
+  if (loading || !user) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center">
         <h1 className="font-playfair italic text-3xl tracking-editorial text-ink animate-pulse">
@@ -66,11 +72,6 @@ export default function HomePage() {
         </h1>
       </div>
     );
-  }
-
-  if (!user) {
-    router.push('/auth');
-    return null;
   }
 
   const handleLike = async (postId: string) => {
