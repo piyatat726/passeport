@@ -3,6 +3,18 @@
 -- 在 Supabase SQL Editor 中執行（以 postgres 角色）
 -- ═══════════════════════════════════════════════════════
 
+-- 步驟 0：新增 views_count 和 parent_id 欄位（若不存在）
+ALTER TABLE public.posts ADD COLUMN IF NOT EXISTS views_count integer DEFAULT 0;
+ALTER TABLE public.comments ADD COLUMN IF NOT EXISTS parent_id uuid REFERENCES public.comments(id) ON DELETE CASCADE;
+
+-- 建立文章瀏覽計數 RPC 函數
+CREATE OR REPLACE FUNCTION increment_view_count(post_id_input uuid)
+RETURNS void AS $$
+BEGIN
+  UPDATE public.posts SET views_count = COALESCE(views_count, 0) + 1 WHERE id = post_id_input;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- 步驟 1：先在 auth.users 建立帳號（外鍵需要）
 INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, created_at, updated_at, confirmation_token, raw_app_meta_data, raw_user_meta_data)
 VALUES

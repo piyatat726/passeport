@@ -6,6 +6,7 @@ import { getFeedPosts, searchPosts, searchPostsByTag, searchUsers, searchPlaces,
 import { Post, User, Place } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
+import Image from 'next/image';
 
 const QUICK_CATEGORIES = [
   { icon: '✈️', label: 'Travel', labelZh: '旅行' },
@@ -36,8 +37,18 @@ export default function DiscoverPage() {
   const [searchResultsPlaces, setSearchResultsPlaces] = useState<Place[]>([]);
   const [searchResultsTags, setSearchResultsTags] = useState<string[]>([]);
   const [popularTags, setPopularTags] = useState<string[]>([]);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const { isDemo } = useAuth();
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Load search history from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('passeport_search_history');
+      if (saved) setSearchHistory(JSON.parse(saved));
+    } catch {}
+  }, []);
 
   // Load initial data
   useEffect(() => {
@@ -83,6 +94,14 @@ export default function DiscoverPage() {
       setSearchResultsTags([]);
       return;
     }
+    // Save to search history
+    const saveHistory = (q: string) => {
+      const updated = [q, ...searchHistory.filter(h => h !== q)].slice(0, 8);
+      setSearchHistory(updated);
+      try { localStorage.setItem('passeport_search_history', JSON.stringify(updated)); } catch {}
+    };
+    saveHistory(debouncedQuery);
+
     const performSearch = async () => {
       setIsSearching(true);
       try {
@@ -161,6 +180,8 @@ export default function DiscoverPage() {
             placeholder="搜尋文章、地點、標籤⋯⋯"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
             className="w-full bg-transparent text-sm text-ink placeholder:text-taupe/50 focus:outline-none font-noto"
           />
           {searchQuery && (
@@ -175,6 +196,35 @@ export default function DiscoverPage() {
           )}
         </div>
       </div>
+
+      {/* Search History Dropdown */}
+      {searchFocused && !isShowingResults && searchHistory.length > 0 && (
+        <div className="px-5 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] text-taupe font-inter tracking-editorial uppercase">Recent Searches</p>
+            <button
+              onClick={() => {
+                setSearchHistory([]);
+                try { localStorage.removeItem('passeport_search_history'); } catch {}
+              }}
+              className="text-[10px] text-taupe hover:text-ink font-noto transition-colors"
+            >
+              清除
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {searchHistory.map((h, i) => (
+              <button
+                key={i}
+                onClick={() => { setSearchQuery(h); setDebouncedQuery(h); }}
+                className="px-3 py-1.5 bg-surface border border-border rounded-full text-xs font-noto text-ink hover:bg-border transition-colors"
+              >
+                {h}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Category Chips */}
       <div className="px-5 mb-6">
@@ -229,10 +279,12 @@ export default function DiscoverPage() {
                       <Link key={post.id} href={`/post/${post.id}`}>
                         <div className="overflow-hidden rounded-lg">
                           <div className="relative aspect-square group">
-                            <img
+                            <Image
                               src={post.cover_image_url}
                               alt={post.title}
-                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              fill
+                              sizes="33vw"
+                              className="object-cover transition-transform duration-500 group-hover:scale-105"
                             />
                             <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors" />
                           </div>
@@ -361,10 +413,12 @@ export default function DiscoverPage() {
                   <Link key={post.id} href={`/post/${post.id}`}>
                     <div className={`overflow-hidden rounded-lg ${i === 0 ? 'row-span-2 col-span-2' : ''}`}>
                       <div className="relative aspect-square group">
-                        <img
+                        <Image
                           src={post.cover_image_url}
                           alt={post.title}
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          fill
+                          sizes={i === 0 ? '66vw' : '33vw'}
+                          className="object-cover transition-transform duration-500 group-hover:scale-105"
                         />
                         <div className="absolute inset-0 bg-black/20" />
                         {i === 0 && (
@@ -405,10 +459,12 @@ export default function DiscoverPage() {
                   className="flex-shrink-0 w-32 rounded-xl overflow-hidden group cursor-pointer"
                 >
                   <div className="relative aspect-[3/4]">
-                    <img
+                    <Image
                       src={city.image}
                       alt={city.name}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      fill
+                      sizes="128px"
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                     <div className="absolute bottom-3 left-3">

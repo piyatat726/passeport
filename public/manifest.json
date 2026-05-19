@@ -1,7 +1,7 @@
 {
-  "name": "PASSEPORT",
+  "name": "PASSEPORT — 把生活，寫成風格",
   "short_name": "PASSEPORT",
-  "description": "把生活，寫成風格 — A fashion lifestyle magazine social app",
+  "description": "探索時尚生活靈感，分享穿搭日記、旅行筆記、咖啡誌。PASSEPORT 是你的風格社群。",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F7F4EF",
@@ -18,15 +18,70 @@
       "purpose": "any"
     },
     {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "/apple-touch-icon.png",
       "sizes": "180x180",
       "type": "image/png"
     }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "探索",
+      "short_name": "Discover",
+      "url": "/discover",
+      "description": "探索時尚生活靈感",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "發文",
+      "short_name": "Create",
+      "url": "/create",
+      "description": "創建新文章",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "收藏",
+      "short_name": "Saved",
+      "url": "/saved",
+      "description": "查看收藏的文章",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "地圖",
+      "short_name": "Map",
+      "url": "/map",
+      "description": "探索地圖上的好去處",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "PASSEPORT 首頁"
+    }
+  ],
+  "prefer_related_applications": false,
+  "edge_side_panel": {
+    "preferred_width": 400
+  }
 }

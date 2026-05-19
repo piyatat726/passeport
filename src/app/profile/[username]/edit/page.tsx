@@ -7,7 +7,7 @@ import { uploadImage, updateUserProfile } from '@/lib/db';
 
 export default function EditProfilePage() {
   const router = useRouter();
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, isDemo } = useAuth();
 
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
@@ -28,6 +28,15 @@ export default function EditProfilePage() {
       setAvatarPreview(user.avatar_url || null);
     }
   }, [user]);
+
+  if (isDemo) {
+    return (
+      <div className="min-h-screen bg-cream flex flex-col items-center justify-center gap-4">
+        <p className="text-taupe font-noto text-sm">訪客模式無法編輯個人檔案</p>
+        <button onClick={() => router.back()} className="text-xs text-ink font-inter underline">返回</button>
+      </div>
+    );
+  }
 
   if (!user) {
     return (

@@ -1,5 +1,19 @@
 User-agent: *
 Allow: /
+Allow: /discover
+Allow: /post/
+Allow: /place/
+Allow: /profile/
+Allow: /auth
+
 Disallow: /api/
 Disallow: /auth/callback
+Disallow: /settings
+Disallow: /saved
+Disallow: /messages
+Disallow: /notifications
+Disallow: /create
+Disallow: /setup
+Disallow: /post/*/edit
+
 Sitemap: https://passeport-gamma.vercel.app/sitemap.xml

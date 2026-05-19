@@ -14,6 +14,10 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user && !isDemo) {
+      router.push('/auth');
+      return;
+    }
     if (!user || isDemo) {
       setLoading(false);
       return;
@@ -29,7 +33,7 @@ export default function MessagesPage() {
       }
     };
     load();
-  }, [user, isDemo]);
+  }, [user, isDemo, router]);
 
   const timeAgo = (dateStr: string) => {
     if (!dateStr) return '';

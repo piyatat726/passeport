@@ -9,14 +9,16 @@ import { CATEGORIES, Post, User, Category } from '@/lib/types';
 export default function PostEditPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isDemo } = useAuth();
 
   const [post, setPost] = useState<(Post & { user: User }) | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   // Form fields
   const [title, setTitle] = useState('');
+  const [subtitle, setSubtitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState<Category>('personal_essay');
   const [location, setLocation] = useState('');
@@ -28,6 +30,7 @@ export default function PostEditPage() {
       const data = await getPostById(id as string);
       setPost(data);
       setTitle(data.title);
+      setSubtitle(data.subtitle || '');
       setContent(data.content);
       setCategory(data.category);
       setLocation(data.location || '');
@@ -43,15 +46,15 @@ export default function PostEditPage() {
     loadPost();
   }, [loadPost]);
 
-  // Guard: redirect if not owner
+  // Guard: redirect if not owner or demo
   useEffect(() => {
+    if (!loading && (isDemo || !user)) {
+      router.replace(`/post/${id}`);
+    }
     if (!loading && post && user && user.id !== post.user_id) {
       router.replace(`/post/${id}`);
     }
-    if (!loading && !user) {
-      router.replace(`/post/${id}`);
-    }
-  }, [loading, post, user, id, router]);
+  }, [loading, post, user, isDemo, id, router]);
 
   const handleSave = async () => {
     if (!post || saving) return;
@@ -63,16 +66,19 @@ export default function PostEditPage() {
       .filter(Boolean);
 
     try {
+      setError('');
       await updatePost(post.id, {
         title: title.trim(),
+        subtitle: subtitle.trim(),
         content: content.trim(),
         category,
         location: location.trim(),
         tags,
-      });
+      }, user!.id);
       router.push(`/post/${post.id}`);
     } catch (err) {
       console.error('Failed to update post:', err);
+      setError('儲存失敗，請稍後再試');
       setSaving(false);
     }
   };
@@ -86,7 +92,11 @@ export default function PostEditPage() {
   }
 
   if (!post || !user || user.id !== post.user_id) {
-    return null;
+    return (
+      <div className="min-h-screen bg-cream flex items-center justify-center">
+        <p className="text-taupe font-noto text-sm">沒有權限編輯此文章</p>
+      </div>
+    );
   }
 
   return (
@@ -115,6 +125,13 @@ export default function PostEditPage() {
 
       {/* Form */}
       <div className="px-5 py-6 space-y-5 max-w-lg mx-auto">
+        {/* Error */}
+        {error && (
+          <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-sm text-red-600 font-noto">{error}</p>
+          </div>
+        )}
+
         {/* Title */}
         <div>
           <label className="block text-xs font-noto text-taupe mb-1.5">
@@ -125,6 +142,20 @@ export default function PostEditPage() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="文章標題"
+            className="w-full px-4 py-3 bg-surface border border-border rounded-xl text-sm font-inter text-ink placeholder:text-taupe/50 focus:outline-none focus:border-taupe transition-colors"
+          />
+        </div>
+
+        {/* Subtitle */}
+        <div>
+          <label className="block text-xs font-noto text-taupe mb-1.5">
+            副標題
+          </label>
+          <input
+            type="text"
+            value={subtitle}
+            onChange={(e) => setSubtitle(e.target.value)}
+            placeholder="簡短描述（選填）"
             className="w-full px-4 py-3 bg-surface border border-border rounded-xl text-sm font-inter text-ink placeholder:text-taupe/50 focus:outline-none focus:border-taupe transition-colors"
           />
         </div>

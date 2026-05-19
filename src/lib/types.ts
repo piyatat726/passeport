@@ -54,6 +54,7 @@ export interface Post {
   location: string;
   tags: string[];
   likes_count?: number;
+  views_count?: number;
   created_at: string;
   user?: User;
   is_liked?: boolean;
@@ -85,8 +86,27 @@ export interface Comment {
   post_id: string;
   user_id: string;
   content: string;
+  parent_id?: string | null;
   created_at: string;
   user?: User;
+  replies?: (Comment & { user: User })[];
+}
+
+export interface Story {
+  id: string;
+  user_id: string;
+  image_url: string;
+  caption?: string;
+  created_at: string;
+  expires_at: string;
+  user?: User;
+  views_count?: number;
+}
+
+export interface StoryGroup {
+  user: User;
+  stories: Story[];
+  hasUnviewed: boolean;
 }
 
 export interface Place {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { CATEGORIES } from '@/lib/types';
 import type { Category } from '@/lib/types';
@@ -8,6 +8,7 @@ import { LocationPicker } from '@/components/location-picker';
 import { AuthGuard } from '@/components/auth-guard';
 import { useAuth } from '@/lib/auth-context';
 import { uploadImage, createPost, searchOrCreatePlace, linkPostToPlace } from '@/lib/db';
+import { useToast } from '@/components/toast';
 
 export default function CreatePostPage() {
   const router = useRouter();
@@ -26,9 +27,61 @@ export default function CreatePostPage() {
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const totalSteps = 3;
   const charLimit = 500;
+
+  // Draft save/load
+  const DRAFT_KEY = 'passeport_draft';
+
+  const saveDraft = useCallback(() => {
+    try {
+      const draft = { category, title, subtitle, content, location, tags };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      toast('草稿已儲存');
+    } catch {}
+  }, [category, title, subtitle, content, location, tags, toast]);
+
+  // Load draft on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY);
+      if (saved) {
+        const d = JSON.parse(saved);
+        if (d.title || d.content) {
+          const cat = CATEGORIES.find(c => c.value === d.category);
+          if (cat) setCategory(cat.value);
+          if (d.title) setTitle(d.title);
+          if (d.subtitle) setSubtitle(d.subtitle);
+          if (d.content) setContent(d.content);
+          if (d.location) setLocation(d.location);
+          if (d.tags) setTags(d.tags);
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Auto-save draft every 30 seconds
+  useEffect(() => {
+    if (!title && !content) return;
+    const timer = setInterval(() => {
+      try {
+        const draft = { category, title, subtitle, content, location, tags };
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      } catch {}
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [category, title, subtitle, content, location, tags]);
+
+  // Cleanup object URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      imagePreviews.forEach(url => URL.revokeObjectURL(url));
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -109,6 +162,8 @@ export default function CreatePostPage() {
         }
       }
 
+      // Clear draft on success
+      localStorage.removeItem(DRAFT_KEY);
       // Success! Navigate to the new post
       router.push(`/post/${newPost.id}`);
     } catch (err) {
@@ -132,7 +187,17 @@ export default function CreatePostPage() {
             <h1 className="font-playfair italic text-base tracking-editorial text-ink">
               {step === 1 ? 'PHOTOS' : step === 2 ? 'COMPOSE' : 'PREVIEW'}
             </h1>
-            <span className="text-xs text-taupe font-inter">{step}/{totalSteps}</span>
+            <div className="flex items-center gap-2">
+              {(title || content) && (
+                <button
+                  onClick={saveDraft}
+                  className="text-[10px] text-taupe font-inter tracking-widest uppercase hover:text-ink transition-colors press-scale"
+                >
+                  Save Draft
+                </button>
+              )}
+              <span className="text-xs text-taupe font-inter">{step}/{totalSteps}</span>
+            </div>
           </div>
           {/* Progress Bar */}
           <div className="h-[2px] bg-surface">

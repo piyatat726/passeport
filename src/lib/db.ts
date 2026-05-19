@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/client';
-import { Post, User, Category, Comment, Place, Notification, Conversation, Message } from './types';
+import { Post, User, Category, Comment, Place, Notification, Conversation, Message, Story } from './types';
 
 // ═══ Posts ═══
 
@@ -72,13 +72,12 @@ export async function createPost(post: {
   return data as Post & { user: User };
 }
 
-// Delete a post
-export async function deletePost(postId: string) {
+// Delete a post (ownership verified by user_id)
+export async function deletePost(postId: string, userId?: string) {
   const supabase = createClient();
-  const { error } = await supabase
-    .from('posts')
-    .delete()
-    .eq('id', postId);
+  let query = supabase.from('posts').delete().eq('id', postId);
+  if (userId) query = query.eq('user_id', userId);
+  const { error } = await query;
 
   if (error) throw error;
 }
@@ -109,23 +108,30 @@ export async function getUserLikedPostIds(userId: string): Promise<Set<string>> 
   return new Set((data || []).map(d => d.post_id));
 }
 
-// Toggle like
+// Toggle like (race-safe: delete first, if nothing deleted then insert)
 export async function toggleLike(userId: string, postId: string): Promise<boolean> {
   const supabase = createClient();
-  const liked = await isPostLiked(userId, postId);
 
-  if (liked) {
-    await supabase.from('likes').delete().eq('user_id', userId).eq('post_id', postId);
-    return false;
-  } else {
-    await supabase.from('likes').insert({ user_id: userId, post_id: postId });
-    // Notify post owner
-    try {
-      const { data: post } = await supabase.from('posts').select('user_id').eq('id', postId).single();
-      if (post) createNotification(post.user_id, userId, 'like', postId);
-    } catch {}
-    return true;
-  }
+  // Try delete first — avoids read-then-write race
+  const { count } = await supabase
+    .from('likes')
+    .delete({ count: 'exact' })
+    .eq('user_id', userId)
+    .eq('post_id', postId);
+
+  if (count && count > 0) return false; // Was liked → now unliked
+
+  // Was not liked → insert (handle duplicate gracefully)
+  const { error } = await supabase.from('likes').insert({ user_id: userId, post_id: postId });
+  if (error && error.code === '23505') return true;
+  if (error) throw error;
+
+  // Notify post owner
+  try {
+    const { data: post } = await supabase.from('posts').select('user_id').eq('id', postId).single();
+    if (post) createNotification(post.user_id, userId, 'like', postId);
+  } catch {}
+  return true;
 }
 
 // ═══ Follows ═══
@@ -143,20 +149,24 @@ export async function isFollowing(followerId: string, followingId: string) {
   return !!data;
 }
 
-// Toggle follow
+// Toggle follow (race-safe)
 export async function toggleFollow(followerId: string, followingId: string): Promise<boolean> {
   const supabase = createClient();
-  const following = await isFollowing(followerId, followingId);
 
-  if (following) {
-    await supabase.from('follows').delete().eq('follower_id', followerId).eq('following_id', followingId);
-    return false;
-  } else {
-    await supabase.from('follows').insert({ follower_id: followerId, following_id: followingId });
-    // Notify the person being followed
-    createNotification(followingId, followerId, 'follow');
-    return true;
-  }
+  const { count } = await supabase
+    .from('follows')
+    .delete({ count: 'exact' })
+    .eq('follower_id', followerId)
+    .eq('following_id', followingId);
+
+  if (count && count > 0) return false; // Was following → now unfollowed
+
+  const { error } = await supabase.from('follows').insert({ follower_id: followerId, following_id: followingId });
+  if (error && error.code === '23505') return true;
+  if (error) throw error;
+
+  createNotification(followingId, followerId, 'follow');
+  return true;
 }
 
 // ═══ Comments ═══
@@ -173,11 +183,13 @@ export async function getComments(postId: string) {
   return data as (Comment & { user: User })[];
 }
 
-export async function addComment(postId: string, userId: string, content: string) {
+export async function addComment(postId: string, userId: string, content: string, parentId?: string) {
   const supabase = createClient();
+  const insertData: Record<string, string> = { post_id: postId, user_id: userId, content };
+  if (parentId) insertData.parent_id = parentId;
   const { data, error } = await supabase
     .from('comments')
-    .insert({ post_id: postId, user_id: userId, content })
+    .insert(insertData)
     .select('*, user:users!comments_user_id_fkey(*)')
     .single();
 
@@ -192,12 +204,11 @@ export async function addComment(postId: string, userId: string, content: string
   return data;
 }
 
-export async function deleteComment(commentId: string) {
+export async function deleteComment(commentId: string, userId?: string) {
   const supabase = createClient();
-  const { error } = await supabase
-    .from('comments')
-    .delete()
-    .eq('id', commentId);
+  let query = supabase.from('comments').delete().eq('id', commentId);
+  if (userId) query = query.eq('user_id', userId);
+  const { error } = await query;
 
   if (error) throw error;
 }
@@ -305,25 +316,39 @@ export async function isPostBookmarked(userId: string, postId: string): Promise<
   return !!data;
 }
 
-// Toggle bookmark
+// Toggle bookmark (race-safe)
 export async function toggleBookmark(userId: string, postId: string): Promise<boolean> {
   const supabase = createClient();
   const collectionId = await getDefaultCollection(userId);
-  const saved = await isPostBookmarked(userId, postId);
 
-  if (saved) {
-    await supabase
-      .from('collection_items')
-      .delete()
-      .eq('collection_id', collectionId)
-      .eq('post_id', postId);
-    return false;
-  } else {
-    await supabase
-      .from('collection_items')
-      .insert({ collection_id: collectionId, post_id: postId });
-    return true;
-  }
+  const { count } = await supabase
+    .from('collection_items')
+    .delete({ count: 'exact' })
+    .eq('collection_id', collectionId)
+    .eq('post_id', postId);
+
+  if (count && count > 0) return false; // Was saved → now unsaved
+
+  const { error } = await supabase
+    .from('collection_items')
+    .insert({ collection_id: collectionId, post_id: postId });
+  if (error && error.code === '23505') return true;
+  if (error) throw error;
+  return true;
+}
+
+// Get all bookmarked posts with user data
+export async function getBookmarkedPosts(userId: string): Promise<(Post & { user: User })[]> {
+  const supabase = createClient();
+  const collectionId = await getDefaultCollection(userId);
+  const { data, error } = await supabase
+    .from('collection_items')
+    .select('post:post_id(*, user:users!posts_user_id_fkey(*))')
+    .eq('collection_id', collectionId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map((d: Record<string, unknown>) => d.post).filter(Boolean) as (Post & { user: User })[];
 }
 
 // Get all bookmarked post IDs for a user
@@ -543,17 +568,35 @@ export async function linkPostToPlace(postId: string, placeId: string) {
   if (error && !error.message.includes('duplicate')) throw error;
 }
 
+// ═══ Post Views ═══
+
+export async function incrementPostView(postId: string) {
+  const supabase = createClient();
+  try {
+    // Try RPC first (requires a DB function)
+    const { error } = await supabase.rpc('increment_view_count', { post_id_input: postId });
+    if (error) {
+      // Fallback: fetch current count and increment
+      const { data } = await supabase.from('posts').select('views_count').eq('id', postId).single();
+      if (data) {
+        await supabase.from('posts').update({ views_count: (data.views_count || 0) + 1 }).eq('id', postId);
+      }
+    }
+  } catch {
+    // Silent fail — view counting is non-critical
+  }
+}
+
 // ═══ Post Edit ═══
 
 export async function updatePost(postId: string, updates: Partial<Pick<Post,
   'title' | 'subtitle' | 'content' | 'category' | 'cover_image_url' |
   'additional_images' | 'location' | 'tags'
->>) {
+>>, userId?: string) {
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from('posts')
-    .update(updates)
-    .eq('id', postId)
+  let query = supabase.from('posts').update(updates).eq('id', postId);
+  if (userId) query = query.eq('user_id', userId);
+  const { data, error } = await query
     .select('*, user:users!posts_user_id_fkey(*)')
     .single();
 
@@ -723,7 +766,13 @@ export async function getPostPlace(postId: string): Promise<Place | null> {
 
 // ═══ Direct Messages ═══
 
+// Validate UUID format to prevent filter injection
+function isValidUUID(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
 export async function getOrCreateConversation(userId1: string, userId2: string): Promise<string> {
+  if (!isValidUUID(userId1) || !isValidUUID(userId2)) throw new Error('Invalid user ID');
   const supabase = createClient();
   // Normalize ordering so conversation is unique regardless of who initiates
   const [u1, u2] = [userId1, userId2].sort();
@@ -748,6 +797,7 @@ export async function getOrCreateConversation(userId1: string, userId2: string):
 }
 
 export async function getConversations(userId: string): Promise<Conversation[]> {
+  if (!isValidUUID(userId)) throw new Error('Invalid user ID');
   const supabase = createClient();
   try {
     const { data, error } = await supabase
@@ -831,6 +881,7 @@ export async function markMessagesRead(conversationId: string, userId: string) {
 }
 
 export async function getTotalUnreadMessages(userId: string): Promise<number> {
+  if (!isValidUUID(userId)) return 0;
   const supabase = createClient();
   try {
     // Get all conversation IDs for user
@@ -919,4 +970,105 @@ export async function getBlockedUserIds(userId: string): Promise<Set<string>> {
   } catch {
     return new Set();
   }
+}
+
+// ═══ Stories ═══
+
+/** Get active stories grouped by user (not expired) */
+export async function getActiveStories(): Promise<{ user: User; stories: Story[] }[]> {
+  const supabase = createClient();
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('stories')
+    .select('*, user:users!stories_user_id_fkey(*)')
+    .gt('expires_at', now)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  if (!data || data.length === 0) return [];
+
+  // Group by user
+  const grouped = new Map<string, { user: User; stories: Story[] }>();
+  for (const story of data) {
+    const userId = story.user_id;
+    if (!grouped.has(userId)) {
+      const userObj = Array.isArray(story.user) ? story.user[0] : story.user;
+      grouped.set(userId, { user: userObj as User, stories: [] });
+    }
+    grouped.get(userId)!.stories.push(story as Story);
+  }
+
+  return Array.from(grouped.values());
+}
+
+/** Get stories by a specific user */
+export async function getUserStories(userId: string): Promise<Story[]> {
+  const supabase = createClient();
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('stories')
+    .select('*')
+    .eq('user_id', userId)
+    .gt('expires_at', now)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return (data || []) as Story[];
+}
+
+/** Create a new story (expires in 24 hours) */
+export async function createStory(userId: string, imageUrl: string, caption?: string): Promise<Story> {
+  const supabase = createClient();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from('stories')
+    .insert({
+      user_id: userId,
+      image_url: imageUrl,
+      caption: caption || null,
+      expires_at: expiresAt,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Story;
+}
+
+/** Delete a story (owner only) */
+export async function deleteStory(storyId: string, userId: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('stories')
+    .delete()
+    .eq('id', storyId)
+    .eq('user_id', userId);
+
+  if (error) throw error;
+}
+
+/** Mark a story as viewed */
+export async function viewStory(storyId: string, userId: string): Promise<void> {
+  const supabase = createClient();
+  try {
+    await supabase
+      .from('story_views')
+      .upsert({ story_id: storyId, viewer_id: userId }, { onConflict: 'story_id,viewer_id' });
+  } catch {
+    // Ignore view tracking errors
+  }
+}
+
+/** Get IDs of stories the user has viewed */
+export async function getViewedStoryIds(userId: string): Promise<Set<string>> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('story_views')
+    .select('story_id')
+    .eq('viewer_id', userId);
+
+  return new Set((data || []).map(d => d.story_id));
 }

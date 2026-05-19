@@ -25,7 +25,7 @@ export function DesktopFrame({ children }: { children: ReactNode }) {
 
   return (
     <DesktopContext.Provider value={true}>
-      <div className="min-h-screen bg-[#e8e4df] flex items-center justify-center p-8">
+      <div className="min-h-screen bg-[#e8e4df] dark:bg-[#121110] flex items-center justify-center p-8">
         <div className="text-center mr-16 max-w-xs">
           <h1 className="font-playfair italic text-5xl tracking-editorial text-ink mb-4">
             PASSEPORT

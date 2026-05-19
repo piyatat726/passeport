@@ -8,6 +8,7 @@ import { User, Post } from '@/lib/types';
 import { BottomNav } from '@/components/bottom-nav';
 import { useTheme } from '@/lib/theme-context';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function ProfilePage() {
   const { username } = useParams();
@@ -311,6 +312,25 @@ export default function ProfilePage() {
               >
                 New Post
               </Link>
+              <Link
+                href="/saved"
+                className="w-9 h-9 border border-border rounded-full flex items-center justify-center"
+                aria-label="Saved posts"
+              >
+                <svg className="w-4 h-4 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" />
+                </svg>
+              </Link>
+              <Link
+                href="/settings"
+                className="w-9 h-9 border border-border rounded-full flex items-center justify-center"
+                aria-label="Settings"
+              >
+                <svg className="w-4 h-4 text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
+                </svg>
+              </Link>
             </>
           ) : (
             <>
@@ -365,11 +385,13 @@ export default function ProfilePage() {
       {activeTab === 'posts' && userPosts.length > 0 && (
         <div className="grid grid-cols-3 gap-0.5 mt-0.5">
           {userPosts.map(post => (
-            <Link key={post.id} href={`/post/${post.id}`} className="aspect-square overflow-hidden">
-              <img
+            <Link key={post.id} href={`/post/${post.id}`} className="relative aspect-square overflow-hidden">
+              <Image
                 src={post.cover_image_url}
                 alt={post.title}
-                className="w-full h-full object-cover hover:opacity-90 transition-opacity"
+                fill
+                sizes="33vw"
+                className="object-cover hover:opacity-90 transition-opacity"
               />
             </Link>
           ))}
@@ -414,10 +436,12 @@ export default function ProfilePage() {
             <div className="grid grid-cols-3 gap-0.5 mt-0.5">
               {savedPosts.map(post => (
                 <Link key={post.id} href={`/post/${post.id}`} className="aspect-square overflow-hidden relative group">
-                  <img
+                  <Image
                     src={post.cover_image_url}
                     alt={post.title}
-                    className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
+                    fill
+                    sizes="33vw"
+                    className="object-cover group-hover:opacity-90 transition-opacity"
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                     <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="white" stroke="none">
@@ -453,10 +477,12 @@ export default function ProfilePage() {
             <div className="grid grid-cols-3 gap-0.5 mt-0.5">
               {likedPosts.map(post => (
                 <Link key={post.id} href={`/post/${post.id}`} className="aspect-square overflow-hidden relative group">
-                  <img
+                  <Image
                     src={post.cover_image_url}
                     alt={post.title}
-                    className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
+                    fill
+                    sizes="33vw"
+                    className="object-cover group-hover:opacity-90 transition-opacity"
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
                     <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="#e74c3c" stroke="none">

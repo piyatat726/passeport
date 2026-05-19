@@ -6,6 +6,8 @@ import { useAuth } from '@/lib/auth-context';
 import { getNotifications, markNotificationsRead } from '@/lib/db';
 import { Notification } from '@/lib/types';
 import Link from 'next/link';
+import Image from 'next/image';
+import { NotificationSkeleton } from '@/components/skeleton';
 
 export default function NotificationsPage() {
   const { user, isDemo } = useAuth();
@@ -23,7 +25,7 @@ export default function NotificationsPage() {
         const data = await getNotifications(user.id);
         setNotifications(data);
         // Mark all as read
-        markNotificationsRead(user.id);
+        await markNotificationsRead(user.id);
       } catch (err) {
         console.error('Failed to load notifications:', err);
       } finally {
@@ -83,9 +85,7 @@ export default function NotificationsPage() {
 
       <div className="px-5 pt-4">
         {loading && (
-          <div className="py-20 text-center">
-            <div className="w-8 h-8 border-2 border-taupe/30 border-t-ink rounded-full animate-spin mx-auto" />
-          </div>
+          <NotificationSkeleton count={6} />
         )}
 
         {!loading && notifications.length === 0 && (
@@ -143,8 +143,8 @@ export default function NotificationsPage() {
 
                 {/* Post Thumbnail */}
                 {n.post?.cover_image_url && (
-                  <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0">
-                    <img src={n.post.cover_image_url} alt="" className="w-full h-full object-cover" />
+                  <div className="relative w-11 h-11 rounded-lg overflow-hidden flex-shrink-0">
+                    <Image src={n.post.cover_image_url} alt="" fill sizes="44px" className="object-cover" />
                   </div>
                 )}
 

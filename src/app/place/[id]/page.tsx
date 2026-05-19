@@ -113,7 +113,7 @@ export default function PlaceDetailPage() {
     navigator.clipboard.writeText(address).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    });
+    }).catch(() => {});
   };
 
   const handleShare = () => {
@@ -470,6 +470,7 @@ export default function PlaceDetailPage() {
 // ═══ Star Rating Component ═══
 
 function StarRating({ rating, size = 'normal' }: { rating: number; size?: 'small' | 'normal' }) {
+  const uid = useRef(Math.random().toString(36).slice(2, 8));
   const starSize = size === 'small' ? 'w-3 h-3' : 'w-3.5 h-3.5';
   const stars = [];
   for (let i = 1; i <= 5; i++) {
@@ -485,14 +486,14 @@ function StarRating({ rating, size = 'normal' }: { rating: number; size?: 'small
         {fill > 0 && (
           <>
             <defs>
-              <clipPath id={`star-clip-${i}-${size}`}>
+              <clipPath id={`star-clip-${uid.current}-${i}`}>
                 <rect x="0" y="0" width={fill === 1 ? 20 : 10} height="20" />
               </clipPath>
             </defs>
             <path
               d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.33L10 13.27l-4.77 2.5.91-5.33L2.27 6.67l5.34-.78L10 1z"
               fill="#D4A053"
-              clipPath={`url(#star-clip-${i}-${size})`}
+              clipPath={`url(#star-clip-${uid.current}-${i})`}
             />
           </>
         )}

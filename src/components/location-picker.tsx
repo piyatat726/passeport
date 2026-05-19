@@ -49,7 +49,11 @@ export function LocationPicker({ value, onChange, placeholder }: LocationPickerP
       }
     };
     document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      // Clear pending debounce timer on unmount
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, []);
 
   const searchLocations = async (q: string) => {

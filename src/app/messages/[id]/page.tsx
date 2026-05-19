@@ -67,16 +67,19 @@ export default function ChatPage() {
   // Poll for new messages every 5 seconds
   useEffect(() => {
     if (!user || isDemo || !conversationId) return;
+    let cancelled = false;
 
     const interval = setInterval(async () => {
       try {
         const msgs = await getMessages(conversationId as string);
-        setMessages(msgs);
-        await markMessagesRead(conversationId as string, user.id);
+        if (!cancelled) {
+          setMessages(msgs);
+          await markMessagesRead(conversationId as string, user.id);
+        }
       } catch {}
     }, 5000);
 
-    return () => clearInterval(interval);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [user, isDemo, conversationId]);
 
   const handleSend = async () => {

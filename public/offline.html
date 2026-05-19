@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PASSEPORT — Offline</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #F7F4EF;
+      color: #222;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans TC', sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 360px;
+    }
+    .logo {
+      font-family: 'Georgia', 'Times New Roman', serif;
+      font-style: italic;
+      font-size: 1.75rem;
+      letter-spacing: 0.12em;
+      margin-bottom: 2.5rem;
+    }
+    .icon {
+      margin-bottom: 1.5rem;
+    }
+    .icon svg {
+      width: 56px;
+      height: 56px;
+      stroke: #999;
+    }
+    .title {
+      font-size: 1.125rem;
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      font-size: 0.9rem;
+      color: #888;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">PASSEPORT</div>
+    <div class="icon">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <!-- wifi arcs -->
+        <path d="M1 9a16.06 16.06 0 0 1 22 0" opacity="0.25" />
+        <path d="M5 13a10.06 10.06 0 0 1 14 0" opacity="0.25" />
+        <path d="M8.5 16.5a5 5 0 0 1 7 0" opacity="0.25" />
+        <!-- center dot -->
+        <circle cx="12" cy="20" r="1" fill="currentColor" stroke="none" opacity="0.3" />
+        <!-- diagonal slash -->
+        <line x1="3" y1="3" x2="21" y2="21" stroke="#999" stroke-width="2" />
+      </svg>
+    </div>
+    <p class="title">你目前處於離線狀態</p>
+    <p class="subtitle">連線後即可瀏覽內容</p>
+  </div>
+</body>
+</html>

@@ -21,7 +21,7 @@ export function BottomNav() {
   ];
 
   return (
-    <nav className={`${isDesktop ? 'sticky' : 'fixed left-0 right-0'} bottom-0 z-40 bg-cream/95 backdrop-blur-md border-t border-border`}>
+    <nav className={`${isDesktop ? 'sticky' : 'fixed left-0 right-0'} bottom-0 z-40 bg-cream/95 backdrop-blur-md border-t border-border`} style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <div className="flex items-center justify-around h-16 px-2">
         {NAV_ITEMS.map((item) => {
           const isActive = item.isProfile

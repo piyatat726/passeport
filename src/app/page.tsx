@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { CATEGORIES, Post, User } from '@/lib/types';
 import { BottomNav } from '@/components/bottom-nav';
+import { FeedSkeleton, PostCardSkeleton } from '@/components/skeleton';
 import { getFeedPosts, getFollowingFeed, getUserLikedPostIds, toggleLike, getUnreadNotificationCount, getTotalUnreadMessages } from '@/lib/db';
 import Link from 'next/link';
+import Image from 'next/image';
+import { StoriesBar } from '@/components/stories-bar';
 
 export default function HomePage() {
   const { user, loading, isDemo } = useAuth();
@@ -114,6 +117,83 @@ export default function HomePage() {
     }
   }, [activeTab, followingLoaded, user, isDemo, loadFollowingPosts]);
 
+  // Infinite scroll refs & state (must be before early return)
+  const observerRef = useRef<HTMLDivElement>(null);
+  const followingObserverRef = useRef<HTMLDivElement>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Pull-to-refresh state (must be before early return)
+  const [refreshing, setRefreshing] = useState(false);
+  const pullStartY = useRef(0);
+  const [pullDistance, setPullDistance] = useState(0);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (contentRef.current && contentRef.current.scrollTop === 0) {
+      pullStartY.current = e.touches[0].clientY;
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (pullStartY.current === 0 || refreshing) return;
+    const diff = e.touches[0].clientY - pullStartY.current;
+    if (diff > 0 && contentRef.current && contentRef.current.scrollTop === 0) {
+      setPullDistance(Math.min(diff * 0.4, 80));
+    }
+  }, [refreshing]);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (pullDistance > 60 && !refreshing) {
+      setRefreshing(true);
+      setPullDistance(60);
+      setPage(0);
+      await Promise.all([loadPosts(0), loadLikes(), loadUnread()]);
+      if (activeTab === 'following') {
+        setFollowingPage(0);
+        await loadFollowingPosts(0);
+      }
+      setRefreshing(false);
+    }
+    setPullDistance(0);
+    pullStartY.current = 0;
+  }, [pullDistance, refreshing, loadPosts, loadLikes, loadUnread, activeTab, loadFollowingPosts]);
+
+  // Infinite scroll observers
+  useEffect(() => {
+    const el = observerRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && hasMore && !feedLoading && !loadingMore && posts.length > 0) {
+          setLoadingMore(true);
+          const nextPage = page + 1;
+          setPage(nextPage);
+          loadPosts(nextPage).finally(() => setLoadingMore(false));
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, feedLoading, loadingMore, page, posts.length, loadPosts]);
+
+  useEffect(() => {
+    const el = followingObserverRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && followingHasMore && !followingLoading && followingPosts.length > 0) {
+          const nextPage = followingPage + 1;
+          setFollowingPage(nextPage);
+          loadFollowingPosts(nextPage);
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [followingHasMore, followingLoading, followingPosts.length, followingPage, loadFollowingPosts]);
+
   useEffect(() => {
     if (!loading && !user) {
       router.push('/auth');
@@ -132,27 +212,25 @@ export default function HomePage() {
 
   const handleLike = async (postId: string) => {
     if (isDemo) return;
-    // Optimistic update
     setLikedPosts(prev => {
       const next = new Set(prev);
       if (next.has(postId)) next.delete(postId);
       else next.add(postId);
       return next;
     });
-    // Update likes_count optimistically
-    setPosts(prev => prev.map(p => {
+    const updateFn = (prev: (Post & { user: User })[]) => prev.map(p => {
       if (p.id === postId) {
         const wasLiked = likedPosts.has(postId);
         return { ...p, likes_count: (p.likes_count || 0) + (wasLiked ? -1 : 1) };
       }
       return p;
-    }));
-    // Persist
+    });
+    setPosts(updateFn);
+    setFollowingPosts(updateFn);
     try {
       await toggleLike(user.id, postId);
     } catch (err) {
       console.error('Like failed:', err);
-      // Revert on error
       setLikedPosts(prev => {
         const next = new Set(prev);
         if (next.has(postId)) next.delete(postId);
@@ -162,18 +240,29 @@ export default function HomePage() {
     }
   };
 
-  const loadMore = () => {
-    if (!hasMore || feedLoading) return;
-    const nextPage = page + 1;
-    setPage(nextPage);
-    loadPosts(nextPage);
-  };
-
   const featured = posts[0];
   const rest = posts.slice(1);
 
   return (
-    <div className="min-h-screen bg-cream pb-20">
+    <div
+      ref={contentRef}
+      className="min-h-screen bg-cream pb-20"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Pull-to-refresh indicator */}
+      {pullDistance > 0 && (
+        <div
+          className="flex items-center justify-center overflow-hidden transition-all"
+          style={{ height: pullDistance }}
+        >
+          <div className={`w-6 h-6 border-2 border-taupe/30 border-t-ink rounded-full ${refreshing ? 'animate-spin' : ''}`}
+            style={{ transform: `rotate(${pullDistance * 4}deg)` }}
+          />
+        </div>
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-30 bg-cream/95 backdrop-blur-md">
         <div className="flex items-center justify-between px-5 pt-14 pb-3">
@@ -227,13 +316,17 @@ export default function HomePage() {
         </div>
       </header>
 
+      {/* Stories */}
+      <StoriesBar />
+
       {/* Content */}
       <div className="px-5 pt-5">
         {/* Following tab */}
-        {activeTab === 'following' && followingLoading && (
-          <div className="py-20 text-center">
-            <div className="w-8 h-8 border-2 border-taupe/30 border-t-ink rounded-full animate-spin mx-auto" />
-            <p className="text-xs text-taupe font-noto mt-4">載入中...</p>
+        {activeTab === 'following' && followingLoading && !followingLoaded && (
+          <div className="space-y-5">
+            <PostCardSkeleton />
+            <PostCardSkeleton />
+            <PostCardSkeleton />
           </div>
         )}
 
@@ -275,18 +368,11 @@ export default function HomePage() {
               ))}
             </div>
 
-            {followingHasMore && (
-              <div className="mt-8 text-center">
-                <button
-                  onClick={() => {
-                    const nextPage = followingPage + 1;
-                    setFollowingPage(nextPage);
-                    loadFollowingPosts(nextPage);
-                  }}
-                  className="px-6 py-2.5 border border-border text-taupe text-xs tracking-editorial uppercase rounded-full font-inter hover:border-taupe hover:text-ink transition-colors"
-                >
-                  LOAD MORE
-                </button>
+            {/* Infinite scroll trigger */}
+            <div ref={followingObserverRef} className="h-4" />
+            {followingLoading && followingLoaded && (
+              <div className="py-4">
+                <PostCardSkeleton />
               </div>
             )}
 
@@ -304,12 +390,9 @@ export default function HomePage() {
           </>
         )}
 
-        {/* Loading State */}
+        {/* Skeleton Loading State */}
         {activeTab === 'foryou' && feedLoading && (
-          <div className="py-20 text-center">
-            <div className="w-8 h-8 border-2 border-taupe/30 border-t-ink rounded-full animate-spin mx-auto" />
-            <p className="text-xs text-taupe font-noto mt-4">載入中...</p>
-          </div>
+          <FeedSkeleton />
         )}
 
         {/* Empty State */}
@@ -362,7 +445,7 @@ export default function HomePage() {
             )}
 
             {/* Post Cards */}
-            <div className="space-y-5">
+            <div className="space-y-5 stagger-children">
               {rest.map(post => (
                 <PostCard
                   key={post.id}
@@ -373,15 +456,11 @@ export default function HomePage() {
               ))}
             </div>
 
-            {/* Load More */}
-            {hasMore && (
-              <div className="mt-8 text-center">
-                <button
-                  onClick={loadMore}
-                  className="px-6 py-2.5 border border-border text-taupe text-xs tracking-editorial uppercase rounded-full font-inter hover:border-taupe hover:text-ink transition-colors"
-                >
-                  LOAD MORE
-                </button>
+            {/* Infinite scroll trigger */}
+            <div ref={observerRef} className="h-4" />
+            {loadingMore && (
+              <div className="py-4">
+                <PostCardSkeleton />
               </div>
             )}
 
@@ -415,10 +494,12 @@ function FeaturedCard({ post, isLiked, onLike }: { post: Post & { user: User }; 
   return (
     <Link href={`/post/${post.id}`} className="block">
       <div className="relative aspect-[4/5] rounded-2xl overflow-hidden group">
-        <img
+        <Image
           src={post.cover_image_url}
           alt={post.title}
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+          fill
+          sizes="(max-width: 768px) 100vw, 50vw"
+          className="object-cover transition-transform duration-700 group-hover:scale-105"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
 
@@ -432,9 +513,9 @@ function FeaturedCard({ post, isLiked, onLike }: { post: Post & { user: User }; 
         {/* Like Button */}
         <button
           onClick={(e) => { e.preventDefault(); onLike(); }}
-          className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center"
+          className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center press-scale"
         >
-          <HeartIcon className="w-4 h-4" filled={isLiked} />
+          <HeartIcon className={`w-4 h-4 ${isLiked ? 'animate-heart-pop' : ''}`} filled={isLiked} />
         </button>
 
         {/* Bottom Content */}
@@ -477,11 +558,13 @@ function PostCard({ post, isLiked, onLike }: { post: Post & { user: User }; isLi
   return (
     <Link href={`/post/${post.id}`} className="block">
       <div className="flex gap-4 group">
-        <div className="w-28 h-36 rounded-xl overflow-hidden flex-shrink-0">
-          <img
+        <div className="relative w-28 h-36 rounded-xl overflow-hidden flex-shrink-0">
+          <Image
             src={post.cover_image_url}
             alt={post.title}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+            fill
+            sizes="112px"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
         </div>
         <div className="flex-1 flex flex-col justify-between py-1">
@@ -509,9 +592,9 @@ function PostCard({ post, isLiked, onLike }: { post: Post & { user: User }; isLi
             </div>
             <button
               onClick={(e) => { e.preventDefault(); onLike(); }}
-              className="flex items-center gap-1 p-1"
+              className="flex items-center gap-1 p-1 press-scale"
             >
-              <HeartIcon className="w-3.5 h-3.5" filled={isLiked} />
+              <HeartIcon className={`w-3.5 h-3.5 ${isLiked ? 'animate-heart-pop' : ''}`} filled={isLiked} />
               {(post.likes_count || 0) > 0 && (
                 <span className="text-[10px] text-taupe font-inter">{post.likes_count}</span>
               )}

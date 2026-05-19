@@ -1,13 +1,25 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { getUserByUsername, getFollowers, getFollowingUsers, isFollowing, toggleFollow } from '@/lib/db';
 import { User } from '@/lib/types';
 import Link from 'next/link';
 
-export default function FollowersPage() {
+export default function FollowersPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-cream flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-taupe/30 border-t-ink rounded-full animate-spin" />
+      </div>
+    }>
+      <FollowersPage />
+    </Suspense>
+  );
+}
+
+function FollowersPage() {
   const { username } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
