@@ -27,3 +27,6 @@ Sentry.init({
   // Set environment
   environment: process.env.NODE_ENV,
 });
+
+// Required for Next.js App Router navigation tracing
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;

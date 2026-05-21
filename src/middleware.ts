@@ -1,4 +1,4 @@
-import { type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/utils/supabase/middleware";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -13,7 +13,7 @@ export async function middleware(request: NextRequest) {
   // 2. Refresh the Supabase session
   const response = await updateSession(request);
 
-  // 3. Check if this is a protected route
+  // 3. Check if this is a protected route — redirect unauthenticated users
   const isProtected = PROTECTED_ROUTES.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   );
@@ -25,7 +25,9 @@ export async function middleware(request: NextRequest) {
     const hasDemo = request.cookies.get("passeport_demo_user");
 
     if (!hasSession && !hasDemo) {
-      // Let client-side auth context handle it
+      const loginUrl = new URL("/auth", request.nextUrl.origin);
+      loginUrl.searchParams.set("redirect", request.nextUrl.pathname);
+      return NextResponse.redirect(loginUrl);
     }
   }
 

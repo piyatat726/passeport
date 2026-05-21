@@ -32,6 +32,9 @@ export function StoryViewer({ groups, initialGroupIndex, currentUserId, onClose 
   const group = groups[groupIndex];
   const story = group?.stories[storyIndex];
 
+  // Ref to always have the latest goNext without stale closures
+  const goNextRef = useRef<() => void>(() => {});
+
   // Track view
   useEffect(() => {
     if (story && currentUserId) {
@@ -39,7 +42,7 @@ export function StoryViewer({ groups, initialGroupIndex, currentUserId, onClose 
     }
   }, [story, currentUserId]);
 
-  // Progress timer
+  // Progress timer — uses goNextRef to avoid stale closure
   const startTimer = useCallback(() => {
     if (!imageLoaded) return;
     startTimeRef.current = Date.now();
@@ -49,10 +52,10 @@ export function StoryViewer({ groups, initialGroupIndex, currentUserId, onClose 
       setProgress(pct);
       if (pct >= 1) {
         clearInterval(timerRef.current!);
-        goNext();
+        goNextRef.current();
       }
     }, 30);
-  }, [imageLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [imageLoaded]);
 
   useEffect(() => {
     if (!isPaused && imageLoaded) {
@@ -85,6 +88,9 @@ export function StoryViewer({ groups, initialGroupIndex, currentUserId, onClose 
     }
   }, [group, storyIndex, groupIndex, groups.length, onClose]);
 
+  // Keep goNextRef in sync
+  useEffect(() => { goNextRef.current = goNext; }, [goNext]);
+
   const goPrev = useCallback(() => {
     if (storyIndex > 0) {
       setStoryIndex(prev => prev - 1);
@@ -113,10 +119,13 @@ export function StoryViewer({ groups, initialGroupIndex, currentUserId, onClose 
     return () => { document.body.style.overflow = ''; };
   }, []);
 
-  if (!group || !story) {
-    onClose();
-    return null;
-  }
+  // Close when group/story becomes invalid (moved to useEffect to avoid render-phase side effect)
+  const shouldClose = !group || !story;
+  useEffect(() => {
+    if (shouldClose) onClose();
+  }, [shouldClose, onClose]);
+
+  if (shouldClose) return null;
 
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();

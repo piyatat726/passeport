@@ -73,11 +73,14 @@ export async function createPost(post: {
 }
 
 // Delete a post (ownership verified by user_id)
-export async function deletePost(postId: string, userId?: string) {
+export async function deletePost(postId: string, userId: string) {
+  if (!userId) throw new Error('userId is required for ownership verification');
   const supabase = createClient();
-  let query = supabase.from('posts').delete().eq('id', postId);
-  if (userId) query = query.eq('user_id', userId);
-  const { error } = await query;
+  const { error } = await supabase
+    .from('posts')
+    .delete()
+    .eq('id', postId)
+    .eq('user_id', userId);
 
   if (error) throw error;
 }
@@ -204,11 +207,14 @@ export async function addComment(postId: string, userId: string, content: string
   return data;
 }
 
-export async function deleteComment(commentId: string, userId?: string) {
+export async function deleteComment(commentId: string, userId: string) {
+  if (!userId) throw new Error('userId is required for ownership verification');
   const supabase = createClient();
-  let query = supabase.from('comments').delete().eq('id', commentId);
-  if (userId) query = query.eq('user_id', userId);
-  const { error } = await query;
+  const { error } = await supabase
+    .from('comments')
+    .delete()
+    .eq('id', commentId)
+    .eq('user_id', userId);
 
   if (error) throw error;
 }
@@ -497,9 +503,20 @@ export async function getUserLikedPosts(userId: string): Promise<(Post & { user:
 
 // ═══ Image Upload ═══
 
+const UPLOAD_MAX_SIZE = 10 * 1024 * 1024; // 10MB
+const UPLOAD_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
 export async function uploadImage(file: File, bucket: 'posts' | 'avatars', userId: string): Promise<string> {
+  // Server-side validation (defense in depth — UI validates too)
+  if (!UPLOAD_ALLOWED_TYPES.includes(file.type)) {
+    throw new Error('不支援的檔案格式');
+  }
+  if (file.size > UPLOAD_MAX_SIZE) {
+    throw new Error('檔案大小超過 10MB 上限');
+  }
+
   const supabase = createClient();
-  const ext = file.name.split('.').pop() || 'jpg';
+  const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
   const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
   const { error } = await supabase.storage

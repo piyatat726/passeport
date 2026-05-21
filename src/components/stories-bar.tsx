@@ -64,6 +64,22 @@ export function StoriesBar() {
     const file = e.target.files?.[0];
     if (!file || !user || isDemo) return;
 
+    // Validate file type
+    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      toast('只支援 JPG、PNG、WebP、GIF 格式', 'error');
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      toast('檔案大小不能超過 10MB', 'error');
+      if (fileRef.current) fileRef.current.value = '';
+      return;
+    }
+
     setUploading(true);
     try {
       const imageUrl = await uploadImage(file, 'posts', user.id);
