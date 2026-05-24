@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { OnboardingOverlay, useOnboarding } from '@/components/onboarding';
 
 export default function AuthPage() {
   return (
@@ -22,6 +23,7 @@ function AuthPageInner() {
   const { signIn, signUp, resetPassword, demoLogin, isAuthenticated } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [showOnboarding, completeOnboarding] = useOnboarding();
 
   // If already authenticated, redirect to home
   useEffect(() => {
@@ -191,6 +193,8 @@ function AuthPageInner() {
 
   // ─── Login / Signup Screen ───
   return (
+    <>
+    {showOnboarding && <OnboardingOverlay onComplete={completeOnboarding} />}
     <div className="min-h-screen bg-cream flex flex-col items-center justify-center px-8">
       <div className="w-full max-w-sm">
         {/* Logo */}
@@ -368,6 +372,7 @@ function AuthPageInner() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

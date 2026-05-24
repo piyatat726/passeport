@@ -10,6 +10,7 @@ import { getFeedPosts, getFollowingFeed, getUserLikedPostIds, toggleLike, getUnr
 import Link from 'next/link';
 import Image from 'next/image';
 import { StoriesBar } from '@/components/stories-bar';
+import { PushNotificationPrompt } from '@/components/push-prompt';
 
 export default function HomePage() {
   const { user, loading, isDemo } = useAuth();
@@ -483,6 +484,7 @@ export default function HomePage() {
         )}
       </div>
 
+      <PushNotificationPrompt />
       <BottomNav />
     </div>
   );
