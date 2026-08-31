@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { BottomNav } from '@/components/bottom-nav';
 import { getFeedPosts, searchPosts, searchPostsByTag, searchUsers, searchPlaces, getPopularTags } from '@/lib/db';
+import { matchCityInQuery } from '@/lib/city-guides';
 import { Post, User, Place } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
@@ -18,11 +19,11 @@ const QUICK_CATEGORIES = [
 ];
 
 const POPULAR_CITIES = [
-  { name: 'Tokyo', nameZh: '東京', image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400&h=500&fit=crop', count: '探索' },
-  { name: 'Seoul', nameZh: '首爾', image: 'https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=400&h=500&fit=crop', count: '探索' },
-  { name: 'New York', nameZh: '紐約', image: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400&h=500&fit=crop', count: '探索' },
-  { name: 'Taipei', nameZh: '台北', image: 'https://images.unsplash.com/photo-1470004914212-05527e49370b?w=400&h=500&fit=crop', count: '探索' },
-  { name: 'Paris', nameZh: '巴黎', image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400&h=500&fit=crop', count: '探索' },
+  { name: 'Tokyo', nameZh: '東京', slug: 'tokyo', image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=400&h=500&fit=crop', count: '城市指南' },
+  { name: 'Seoul', nameZh: '首爾', slug: 'seoul', image: 'https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=400&h=500&fit=crop', count: '城市指南' },
+  { name: 'New York', nameZh: '紐約', slug: 'new-york', image: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=400&h=500&fit=crop', count: '城市指南' },
+  { name: 'Taipei', nameZh: '台北', slug: 'taipei', image: 'https://images.unsplash.com/photo-1470004914212-05527e49370b?w=400&h=500&fit=crop', count: '城市指南' },
+  { name: 'Paris', nameZh: '巴黎', slug: 'paris', image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=400&h=500&fit=crop', count: '城市指南' },
 ];
 
 type SearchTab = 'posts' | 'users' | 'places' | 'tags';
@@ -162,6 +163,7 @@ function DiscoverPageInner() {
   }, [searchParams, handleTagClick]);
 
   const isShowingResults = debouncedQuery.length >= 2;
+  const cityMatch = matchCityInQuery(searchQuery);
 
   const SEARCH_TABS: { key: SearchTab; label: string }[] = [
     { key: 'posts', label: '文章' },
@@ -205,6 +207,34 @@ function DiscoverPageInner() {
           )}
         </div>
       </div>
+
+      {/* City guide shortcut — the query mentions a city we can answer for */}
+      {cityMatch && (
+        <div className="px-5 mb-4">
+          <Link
+            href={`/city/${cityMatch.slug}`}
+            className="flex items-center gap-3 p-4 bg-ink rounded-xl group"
+          >
+            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-cream" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                <circle cx="12" cy="10" r="3" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-inter font-medium text-cream">
+                {cityMatch.nameZh}城市指南 · {cityMatch.nameEn}
+              </p>
+              <p className="text-[11px] text-cream/60 font-noto mt-0.5">
+                哪裡好玩、哪裡喝咖啡 — 一頁幫你整理好
+              </p>
+            </div>
+            <svg className="w-4 h-4 text-cream/60 group-hover:text-cream group-hover:translate-x-0.5 transition-all flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </Link>
+        </div>
+      )}
 
       {/* Search History Dropdown */}
       {searchFocused && !isShowingResults && searchHistory.length > 0 && (
@@ -462,9 +492,9 @@ function DiscoverPageInner() {
 
             <div className="flex gap-3 overflow-x-auto px-5 pb-2 no-scrollbar">
               {POPULAR_CITIES.map(city => (
-                <div
+                <Link
                   key={city.name}
-                  onClick={() => { setSearchQuery(city.name); setDebouncedQuery(city.name); }}
+                  href={`/city/${city.slug}`}
                   className="flex-shrink-0 w-32 rounded-xl overflow-hidden group cursor-pointer"
                 >
                   <div className="relative aspect-[3/4]">
@@ -481,7 +511,7 @@ function DiscoverPageInner() {
                       <p className="text-white/60 text-[10px] font-noto">{city.nameZh} · {city.count}</p>
                     </div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           </div>
