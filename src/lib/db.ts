@@ -204,6 +204,14 @@ export async function addComment(postId: string, userId: string, content: string
     if (post) createNotification(post.user_id, userId, 'comment', postId, content);
   } catch {}
 
+  // If this is a reply, also notify the parent comment's author
+  if (parentId) {
+    try {
+      const { data: parentComment } = await supabase.from('comments').select('user_id').eq('id', parentId).single();
+      if (parentComment) createNotification(parentComment.user_id, userId, 'comment', postId, content);
+    } catch {}
+  }
+
   return data;
 }
 

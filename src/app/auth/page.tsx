@@ -25,10 +25,13 @@ function AuthPageInner() {
   const searchParams = useSearchParams();
   const [showOnboarding, completeOnboarding] = useOnboarding();
 
-  // If already authenticated, redirect to home
+  // Where to go after login (middleware may set ?redirect=/create etc.)
+  const redirectTo = searchParams.get('redirect') || '/';
+
+  // If already authenticated, redirect
   useEffect(() => {
-    if (isAuthenticated) router.replace('/');
-  }, [isAuthenticated, router]);
+    if (isAuthenticated) router.replace(redirectTo);
+  }, [isAuthenticated, router, redirectTo]);
 
   // Check for error from callback
   useEffect(() => {
@@ -44,7 +47,7 @@ function AuthPageInner() {
     setLoading(true);
     try {
       await signIn(email, password);
-      router.push('/');
+      router.push(redirectTo);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '發生錯誤，請再試一次');
     } finally {
@@ -77,7 +80,7 @@ function AuthPageInner() {
         setMode('confirm');
       } else {
         // Auto-confirmed (e.g., in dev mode)
-        router.push('/');
+        router.push(redirectTo);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '發生錯誤，請再試一次');
@@ -106,7 +109,7 @@ function AuthPageInner() {
 
   const handleDemo = () => {
     demoLogin();
-    router.push('/');
+    router.push(redirectTo);
   };
 
   // ─── Confirmation Screen ───

@@ -188,9 +188,23 @@ export default function PostDetailClient() {
     return d.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' });
   };
 
-  // Build threaded comment tree
+  // Build threaded comment tree — flatten all nested replies under their root ancestor
   const topLevelComments = comments.filter(c => !c.parent_id);
-  const getReplies = (parentId: string) => comments.filter(c => c.parent_id === parentId);
+  const topLevelIdSet = new Set(topLevelComments.map(c => c.id));
+
+  // Find the root (top-level) ancestor of any comment
+  const findRoot = (commentId: string): string => {
+    const comment = comments.find(c => c.id === commentId);
+    if (!comment?.parent_id || topLevelIdSet.has(comment.id)) return comment?.id || commentId;
+    if (topLevelIdSet.has(comment.parent_id)) return comment.parent_id;
+    return findRoot(comment.parent_id);
+  };
+
+  // All non-top-level comments grouped under their root parent
+  const getReplies = (rootId: string) =>
+    comments
+      .filter(c => c.parent_id && findRoot(c.id) === rootId)
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   return (
     <div className="min-h-screen bg-cream pb-24">
@@ -427,11 +441,7 @@ export default function PostDetailClient() {
 
       {/* Share Panel */}
       <div className="px-6 mt-8">
-        <SharePanel
-          title={post.title}
-          subtitle={post.subtitle}
-          url={typeof window !== 'undefined' ? window.location.href : ''}
-        />
+        <SharePanelWrapper title={post.title} subtitle={post.subtitle} />
       </div>
 
       {/* End Mark */}
@@ -606,6 +616,16 @@ export default function PostDetailClient() {
       )}
     </div>
   );
+}
+
+// Wrapper to avoid hydration mismatch — url is only set after mount
+function SharePanelWrapper({ title, subtitle }: { title: string; subtitle?: string }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    setUrl(window.location.href);
+  }, []);
+  if (!url) return null;
+  return <SharePanel title={title} subtitle={subtitle} url={url} />;
 }
 
 // Threaded comment component

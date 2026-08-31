@@ -34,13 +34,16 @@ export function PushNotificationPrompt() {
     try {
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
-        // Register for push
-        const registration = await navigator.serviceWorker.ready;
-        await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          // In production, replace with your VAPID public key
-          applicationServerKey: undefined,
-        });
+        // Only attempt push subscription if VAPID key is configured
+        const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+        if (vapidKey) {
+          const registration = await navigator.serviceWorker.ready;
+          await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: vapidKey,
+          });
+        }
+        // Permission granted even without push subscription — local notifications work
       }
     } catch (err) {
       console.error('Push subscription failed:', err);

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { BottomNav } from '@/components/bottom-nav';
 import { getFeedPosts, searchPosts, searchPostsByTag, searchUsers, searchPlaces, getPopularTags } from '@/lib/db';
 import { Post, User, Place } from '@/lib/types';
@@ -27,6 +28,15 @@ const POPULAR_CITIES = [
 type SearchTab = 'posts' | 'users' | 'places' | 'tags';
 
 export default function DiscoverPage() {
+  return (
+    <Suspense>
+      <DiscoverPageInner />
+    </Suspense>
+  );
+}
+
+function DiscoverPageInner() {
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [posts, setPosts] = useState<(Post & { user: User })[]>([]);
@@ -94,21 +104,23 @@ export default function DiscoverPage() {
       setSearchResultsTags([]);
       return;
     }
-    // Save to search history
-    const saveHistory = (q: string) => {
-      const updated = [q, ...searchHistory.filter(h => h !== q)].slice(0, 8);
-      setSearchHistory(updated);
+    // Save to search history (use functional updater to avoid stale closure)
+    setSearchHistory(prev => {
+      const updated = [debouncedQuery, ...prev.filter(h => h !== debouncedQuery)].slice(0, 8);
       try { localStorage.setItem('passeport_search_history', JSON.stringify(updated)); } catch {}
-    };
-    saveHistory(debouncedQuery);
+      return updated;
+    });
 
     const performSearch = async () => {
       setIsSearching(true);
       try {
+        // "#tag" queries search by tag; everything else is full-text
+        const isTagQuery = debouncedQuery.startsWith('#');
+        const term = isTagQuery ? debouncedQuery.slice(1) : debouncedQuery;
         const [postsRes, usersRes, placesRes, tagsRes] = await Promise.all([
-          searchPosts(debouncedQuery, 20),
-          searchUsers(debouncedQuery, 20),
-          searchPlaces(debouncedQuery, 20),
+          isTagQuery ? searchPostsByTag(term, 20) : searchPosts(term, 20),
+          searchUsers(term, 20),
+          searchPlaces(term, 20),
           getPopularTags(50),
         ]);
         setSearchResultsPosts(postsRes);
@@ -116,7 +128,7 @@ export default function DiscoverPage() {
         setSearchResultsPlaces(placesRes);
         // Filter tags that match the query
         const matchingTags = tagsRes.filter((tag: string) =>
-          tag.toLowerCase().includes(debouncedQuery.toLowerCase())
+          tag.toLowerCase().includes(term.toLowerCase())
         );
         setSearchResultsTags(matchingTags);
       } catch (err) {
@@ -135,22 +147,19 @@ export default function DiscoverPage() {
     setActiveTab('posts');
   }, []);
 
-  // Handle tag click from search results
-  const handleTagClick = useCallback(async (tag: string) => {
+  // Handle tag click — unified with performSearch (a "#..." query searches by tag)
+  const handleTagClick = useCallback((tag: string) => {
     const cleanTag = tag.startsWith('#') ? tag.slice(1) : tag;
     setSearchQuery(`#${cleanTag}`);
+    setDebouncedQuery(`#${cleanTag}`);
     setActiveTab('posts');
-    setIsSearching(true);
-    try {
-      const results = await searchPostsByTag(cleanTag, 20);
-      setSearchResultsPosts(results);
-      setDebouncedQuery(`#${cleanTag}`);
-    } catch (err) {
-      console.error('Tag search failed:', err);
-    } finally {
-      setIsSearching(false);
-    }
   }, []);
+
+  // Support /discover?tag=xxx links (from post pages)
+  useEffect(() => {
+    const tagParam = searchParams.get('tag');
+    if (tagParam) handleTagClick(tagParam);
+  }, [searchParams, handleTagClick]);
 
   const isShowingResults = debouncedQuery.length >= 2;
 

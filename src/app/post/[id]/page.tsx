@@ -23,13 +23,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
     const description = post.subtitle || '探索時尚生活靈感 — PASSEPORT';
 
+    const ogImages = post.cover_image_url
+      ? [{ url: post.cover_image_url, width: 800, height: 1067, alt: post.title }]
+      : [];
+
     return {
       title: `${post.title} — PASSEPORT`,
       description,
       openGraph: {
         title: post.title,
         description,
-        images: [{ url: post.cover_image_url, width: 800, height: 1067, alt: post.title }],
+        ...(ogImages.length > 0 && { images: ogImages }),
         type: 'article',
         siteName: 'PASSEPORT',
         locale: 'zh_TW',
@@ -38,7 +42,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         card: 'summary_large_image',
         title: post.title,
         description,
-        images: [post.cover_image_url],
+        ...(post.cover_image_url && { images: [post.cover_image_url] }),
       },
     };
   } catch {
