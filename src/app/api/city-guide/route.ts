@@ -6,6 +6,8 @@ import { CityGuide, getStaticGuide } from '@/lib/city-guides';
 // not covered by the hand-written flagship guides.
 
 export const dynamic = 'force-dynamic';
+// Generation can take 10-30s — raise the serverless limit (Hobby caps at 60)
+export const maxDuration = 60;
 
 const GEMINI_URL =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
@@ -65,7 +67,7 @@ async function generateGuide(city: string): Promise<CityGuide | null> {
 - note 要短、有畫面感、有觀點，避免「不容錯過」「必訪」這種空話
 - 如果「${city}」不是一個真實城市，回傳 {"error": "not_a_city"}`;
 
-  try {
+  const attempt = async (): Promise<CityGuide | null> => {
     const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -74,10 +76,12 @@ async function generateGuide(city: string): Promise<CityGuide | null> {
         generationConfig: {
           responseMimeType: 'application/json',
           temperature: 0.8,
+          maxOutputTokens: 4096,
+          // Skip "thinking" — faster and avoids truncated JSON output
+          thinkingConfig: { thinkingBudget: 0 },
         },
       }),
-      // Generation can take a while
-      signal: AbortSignal.timeout(50000),
+      signal: AbortSignal.timeout(45000),
     });
 
     if (!res.ok) {
@@ -86,13 +90,33 @@ async function generateGuide(city: string): Promise<CityGuide | null> {
     }
 
     const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) return null;
+    const candidate = data?.candidates?.[0];
+    const text = candidate?.content?.parts?.[0]?.text;
+    if (!text) {
+      console.error('Gemini empty response, finishReason:', candidate?.finishReason, JSON.stringify(data).slice(0, 300));
+      return null;
+    }
 
-    const parsed = JSON.parse(text);
-    if (parsed?.error === 'not_a_city') return null;
-    if (!isValidGuide(parsed)) return null;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      console.error('Gemini JSON parse failed, finishReason:', candidate?.finishReason, 'text head:', String(text).slice(0, 200));
+      return null;
+    }
+    if ((parsed as { error?: string })?.error === 'not_a_city') return null;
+    if (!isValidGuide(parsed)) {
+      console.error('Gemini guide failed validation:', JSON.stringify(parsed).slice(0, 300));
+      return null;
+    }
     return parsed;
+  };
+
+  try {
+    const first = await attempt();
+    if (first) return first;
+    // One retry — generation is occasionally flaky
+    return await attempt();
   } catch (err) {
     console.error('Guide generation failed:', err);
     return null;
